@@ -1,0 +1,19 @@
+---
+description: Operator owns git push and CI/CD; the agent must not
+alwaysApply: true
+---
+
+# Push and CI/CD are operator-owned
+
+The human operator (not the coding agent) runs git push and CI/CD.
+
+The agent must **not**:
+
+- `git push` (any remote, any branch)
+- run `scripts/git-autocommit.ps1` (it commits **and** pushes)
+- trigger GitHub Actions (`workflow_dispatch`, `gh workflow run`, reruns)
+- log into Yandex Container Registry, build/push images, or run `scripts/deploy_containers.sh`
+
+The agent **may** edit files and run local checks (`npm run typecheck`, tests). Commit only when the operator explicitly asks, and even then stop before push.
+
+When a change needs to land on `main` or go through CI, say so and leave staging/commit/push to the operator (VS Code task **Git: auto add+commit+push**, or their own git).
