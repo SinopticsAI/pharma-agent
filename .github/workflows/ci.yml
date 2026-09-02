@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+
+  image:
+    needs: check
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to Yandex Container Registry
+        run: |
+          echo '${{ secrets.YC_SA_JSON }}' > sa.json
+          docker login --username json_key --password-stdin cr.yandex < sa.json
+      - name: Build and push
+        env:
+          REGISTRY_ID: ${{ secrets.REGISTRY_ID }}
+        run: |
+          TAG="${GITHUB_SHA::8}"
+          docker build -f docker/agent/Dockerfile -t "cr.yandex/$REGISTRY_ID/agent:$TAG" -t "cr.yandex/$REGISTRY_ID/agent:latest" .
+          docker push "cr.yandex/$REGISTRY_ID/agent:$TAG"
+          docker push "cr.yandex/$REGISTRY_ID/agent:latest"

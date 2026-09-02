@@ -1,0 +1,43 @@
+name: deploy-containers
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Image tag to deploy
+        default: latest
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install yc
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -a
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+      - name: Configure yc
+        run: |
+          echo '${{ secrets.YC_SA_JSON }}' > sa.json
+          yc config profile create ci
+          yc config set service-account-key sa.json
+          yc config set folder-id '${{ secrets.YC_FOLDER_ID }}'
+      - name: Deploy container
+        id: deploy
+        env:
+          YC_FOLDER_ID: ${{ secrets.YC_FOLDER_ID }}
+          REGISTRY_ID: ${{ secrets.REGISTRY_ID }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          LOCKBOX_SECRET_ID: ${{ secrets.LOCKBOX_SECRET_ID }}
+          VPC_NETWORK_ID: ${{ secrets.VPC_NETWORK_ID }}
+          PG_HOST: ${{ secrets.PG_HOST }}
+          EDGE_API_BASE: ${{ secrets.EDGE_API_BASE }}
+          SA_GATEWAY_ID: ${{ secrets.SA_GATEWAY_ID }}
+        run: |
+          chmod +x scripts/deploy_containers.sh
+          ./scripts/deploy_containers.sh
+      - name: Summary
+        run: |
+          echo "### pharma-agent deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "Container id: \`${{ steps.deploy.outputs.container_agent_id }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Set CONTAINER_AGENT_ID in pharma-edge/infra/account.env and re-render the gateway." >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,19 @@
+# Service accounts. The agent is deliberately narrow: it reads secrets, pulls
+# its own image and calls Edge over HTTP. It has no storage, no YDB and no
+# workflow rights, because it must not reach business data except through Edge.
+
+service_accounts:
+  - name: pharma-agent-sa
+    description: Runtime identity of the Mastra container
+    roles:
+      - container-registry.images.puller
+      - lockbox.payloadViewer
+      - vpc.user
+
+  - name: pharma-agent-sa-ci
+    description: CI pushes images and deploys revisions
+    roles:
+      - container-registry.images.pusher
+      - serverless-containers.editor
+      - iam.serviceAccounts.user
+      - lockbox.payloadViewer

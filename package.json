@@ -1,0 +1,29 @@
+{
+  "name": "pharma-agent",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Mastra intake agents for the MedMost cabinet. Drafts only: never files, never signs, never spends.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "node .mastra/output/index.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^1.0.0",
+    "@mastra/ai-sdk": "^1.0.0",
+    "@mastra/core": "^1.0.0",
+    "@mastra/memory": "^1.0.0",
+    "@mastra/pg": "^1.0.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "mastra": "^1.0.0",
+    "typescript": "^5.6.0"
+  }
+}

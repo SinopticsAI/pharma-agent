@@ -1,0 +1,5 @@
+# Container Registry images built by CI and pushed as cr.yandex/<registry>/<image>:<tag>.
+registry_name: pharma-agent
+
+images:
+  - agent
