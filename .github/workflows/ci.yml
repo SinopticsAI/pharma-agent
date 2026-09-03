@@ -22,15 +22,29 @@ jobs:
     needs: check
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Map secrets here (allowed). Job/step `if` cannot read `secrets` directly.
+    env:
+      YC_SA_JSON: ${{ secrets.YC_SA_JSON }}
+      REGISTRY_ID: ${{ secrets.REGISTRY_ID }}
     steps:
-      - uses: actions/checkout@v5
-      - name: Login to Yandex Container Registry
+      - name: Skip image publish
+        if: env.YC_SA_JSON == '' || env.REGISTRY_ID == ''
         run: |
-          echo '${{ secrets.YC_SA_JSON }}' > sa.json
+          echo "YC_SA_JSON and/or REGISTRY_ID are not set."
+          echo "Image publish skipped. Add both under Settings → Secrets and variables → Actions."
+
+      - uses: actions/checkout@v5
+        if: env.YC_SA_JSON != '' && env.REGISTRY_ID != ''
+
+      - name: Login to Yandex Container Registry
+        if: env.YC_SA_JSON != '' && env.REGISTRY_ID != ''
+        run: |
+          printf '%s\n' "$YC_SA_JSON" > sa.json
           docker login --username json_key --password-stdin cr.yandex < sa.json
+          rm -f sa.json
+
       - name: Build and push
-        env:
-          REGISTRY_ID: ${{ secrets.REGISTRY_ID }}
+        if: env.YC_SA_JSON != '' && env.REGISTRY_ID != ''
         run: |
           TAG="${GITHUB_SHA::8}"
           docker build -f docker/agent/Dockerfile -t "cr.yandex/$REGISTRY_ID/agent:$TAG" -t "cr.yandex/$REGISTRY_ID/agent:latest" .

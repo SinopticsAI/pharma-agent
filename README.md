@@ -99,7 +99,10 @@ token never reaches the container.
 Push and CI/CD are **operator-owned**. The coding agent must not `git push`,
 trigger GitHub Actions, push images, or run the deploy script. Use the VS Code
 task **Git: auto add+commit+push** (or your own git) when you want a change on
-`main`; Actions then typechecks and, on `main`, builds the image.
+`main`. Actions always typechecks. On `main`, the image job publishes to
+Container Registry only when `YC_SA_JSON` and `REGISTRY_ID` are set in the
+repo secrets; until then those steps are skipped so an empty `docker login`
+does not fail the run.
 
 1. `scripts/deploy_containers.sh` builds nothing — CI pushes the image, this
    deploys a revision with `--network-id` and Lockbox secrets.
