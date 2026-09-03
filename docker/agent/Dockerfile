@@ -1,13 +1,15 @@
 # Mastra intake agents. Built by `mastra build` into .mastra/output.
-FROM node:20-slim AS build
+# Current @mastra/* packages require Node >=22.13; on Node 20 the bundler
+# resolves @mastra/ai-sdk@^1.0.0 to the stale 1.0.1 (peer core 0.21–0.24).
+FROM node:22-slim AS build
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 COPY tsconfig.json ./
 COPY src ./src
 RUN npx mastra build
 
-FROM node:20-slim
+FROM node:22-slim
 WORKDIR /app
 ENV NODE_ENV=production
 # The container must answer within its execution timeout; it cannot stream, so

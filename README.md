@@ -83,6 +83,8 @@ scripts/              deploy a container revision
 
 ## Local development
 
+Needs Node 22.13 or newer (`@mastra/*` engines).
+
 ```bash
 cp .env.example .env      # fill PG_PASSWORD, EDGE_API_KEY, AI_STUDIO_API_KEY
 npm install
