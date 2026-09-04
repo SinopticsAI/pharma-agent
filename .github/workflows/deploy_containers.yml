@@ -29,6 +29,8 @@ jobs:
           REGISTRY_ID: ${{ secrets.REGISTRY_ID }}
           IMAGE_TAG: ${{ inputs.image_tag }}
           LOCKBOX_SECRET_ID: ${{ secrets.LOCKBOX_SECRET_ID }}
+          LOCKBOX_PG_SECRET_ID: ${{ secrets.LOCKBOX_PG_SECRET_ID }}
+          LOCKBOX_APP_SECRET_ID: ${{ secrets.LOCKBOX_APP_SECRET_ID }}
           VPC_NETWORK_ID: ${{ secrets.VPC_NETWORK_ID }}
           PG_HOST: ${{ secrets.PG_HOST }}
           EDGE_API_BASE: ${{ secrets.EDGE_API_BASE }}

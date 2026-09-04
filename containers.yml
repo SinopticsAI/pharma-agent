@@ -20,7 +20,10 @@ containers:
     public: false
     env:
       SECRET_BACKEND: lockbox
-      LOCKBOX_SECRET_ID: ${LOCKBOX_SECRET_ID}
+      # pharma_agent_password comes from the cluster secret, the API keys from
+      # the application secret. One id for both is still accepted.
+      LOCKBOX_PG_SECRET_ID: ${LOCKBOX_PG_SECRET_ID}
+      LOCKBOX_APP_SECRET_ID: ${LOCKBOX_APP_SECRET_ID}
       FOLDER_ID: ${YC_FOLDER_ID}
       EDGE_API_BASE: ${EDGE_API_BASE}
       PG_HOST: ${PG_HOST}

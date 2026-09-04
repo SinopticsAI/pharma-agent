@@ -9,7 +9,15 @@ set -euo pipefail
 YC_FOLDER_ID="${YC_FOLDER_ID:?}"
 REGISTRY_ID="${REGISTRY_ID:?}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
-LOCKBOX_SECRET_ID="${LOCKBOX_SECRET_ID:?}"
+# Two Lockbox secrets, because that is how the folder is laid out: the cluster
+# password sits with the other database passwords (pharma-edge-pg) and the API
+# keys with the application secrets. LOCKBOX_SECRET_ID still covers both when
+# all three keys live in one secret.
+LOCKBOX_SECRET_ID="${LOCKBOX_SECRET_ID:-}"
+LOCKBOX_PG_SECRET_ID="${LOCKBOX_PG_SECRET_ID:-$LOCKBOX_SECRET_ID}"
+LOCKBOX_APP_SECRET_ID="${LOCKBOX_APP_SECRET_ID:-$LOCKBOX_SECRET_ID}"
+: "${LOCKBOX_PG_SECRET_ID:?set LOCKBOX_PG_SECRET_ID (holds pharma_agent_password) or LOCKBOX_SECRET_ID}"
+: "${LOCKBOX_APP_SECRET_ID:?set LOCKBOX_APP_SECRET_ID (holds edge_api_key and ai_studio_api_key) or LOCKBOX_SECRET_ID}"
 VPC_NETWORK_ID="${VPC_NETWORK_ID:?}"
 PG_HOST="${PG_HOST:?}"
 EDGE_API_BASE="${EDGE_API_BASE:-https://pharma-edge.sinoptics.ru}"
@@ -41,9 +49,9 @@ yc serverless container revision deploy \
   --concurrency 4 \
   --execution-timeout 300s \
   --network-id "$VPC_NETWORK_ID" \
-  --secret "environment-variable=PG_PASSWORD,id=${LOCKBOX_SECRET_ID},key=pharma_agent_password" \
-  --secret "environment-variable=EDGE_API_KEY,id=${LOCKBOX_SECRET_ID},key=edge_api_key" \
-  --secret "environment-variable=AI_STUDIO_API_KEY,id=${LOCKBOX_SECRET_ID},key=ai_studio_api_key" \
+  --secret "environment-variable=PG_PASSWORD,id=${LOCKBOX_PG_SECRET_ID},key=pharma_agent_password" \
+  --secret "environment-variable=EDGE_API_KEY,id=${LOCKBOX_APP_SECRET_ID},key=edge_api_key" \
+  --secret "environment-variable=AI_STUDIO_API_KEY,id=${LOCKBOX_APP_SECRET_ID},key=ai_studio_api_key" \
   --environment "FOLDER_ID=${YC_FOLDER_ID}" \
   --environment "EDGE_API_BASE=${EDGE_API_BASE}" \
   --environment "PG_HOST=${PG_HOST}" \
