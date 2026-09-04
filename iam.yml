@@ -8,6 +8,7 @@ service_accounts:
     roles:
       - container-registry.images.puller
       - lockbox.payloadViewer
+      - kms.keys.encrypterDecrypter
       - vpc.user
 
   - name: pharma-agent-sa-ci
@@ -15,5 +16,8 @@ service_accounts:
     roles:
       - container-registry.images.pusher
       - serverless-containers.editor
+      # --secret on a container revision is checked as a functions permission.
+      - functions.editor
       - iam.serviceAccounts.user
       - lockbox.payloadViewer
+      - kms.keys.encrypterDecrypter

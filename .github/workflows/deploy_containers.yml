@@ -6,6 +6,16 @@ on:
       image_tag:
         description: Image tag to deploy
         default: latest
+  workflow_call:
+    inputs:
+      image_tag:
+        description: Image tag to deploy
+        type: string
+        default: latest
+
+concurrency:
+  group: deploy-pharma-agent
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -17,11 +27,15 @@ jobs:
           curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -a
           echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
       - name: Configure yc
+        env:
+          YC_SA_JSON: ${{ secrets.YC_SA_JSON }}
+          YC_FOLDER_ID: ${{ secrets.YC_FOLDER_ID }}
         run: |
-          echo '${{ secrets.YC_SA_JSON }}' > sa.json
+          printf '%s\n' "$YC_SA_JSON" > sa.json
           yc config profile create ci
           yc config set service-account-key sa.json
-          yc config set folder-id '${{ secrets.YC_FOLDER_ID }}'
+          yc config set folder-id "$YC_FOLDER_ID"
+          rm -f sa.json
       - name: Deploy container
         id: deploy
         env:

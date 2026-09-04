@@ -101,16 +101,17 @@ token never reaches the container.
 Push and CI/CD are **operator-owned**. The coding agent must not `git push`,
 trigger GitHub Actions, push images, or run the deploy script. Use the VS Code
 task **Git: auto add+commit+push** (or your own git) when you want a change on
-`main`. Actions always typechecks. On `main`, the image job publishes to
-Container Registry only when `YC_SA_JSON` and `REGISTRY_ID` are set in the
+`main`. Actions always typechecks. On `main`, after typecheck CI publishes the
+image and then deploys a container revision (same tag). Manual
+**deploy-containers** is still there to roll a specific tag.
+Image publish runs only when `YC_SA_JSON` and `REGISTRY_ID` are set in the
 repo secrets; until then those steps are skipped so an empty `docker login`
 does not fail the run.
 
-1. `scripts/deploy_containers.sh` builds nothing — CI pushes the image, this
-   deploys a revision with `--network-id` and Lockbox secrets.
-2. Take `CONTAINER_AGENT_ID` from the output into
+1. `scripts/deploy_containers.sh` builds nothing — CI already pushed the image.
+2. First time only: take `CONTAINER_AGENT_ID` from the deploy summary into
    `pharma-edge/infra/account.env`.
-3. Re-render and apply the gateway spec so `/chat/{agentId}` points at the new
-   container.
+3. Re-render and apply the gateway spec so `/chat/{agentId}` points at the
+   container. Later revisions keep the same id; the gateway stays as is.
 
 The container is not public. Only the gateway service account may invoke it.
