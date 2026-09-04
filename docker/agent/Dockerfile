@@ -29,7 +29,8 @@ ENV PG_SSLROOTCERT=/usr/local/share/ca-certificates/yandex-root.crt
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/.mastra/output ./.mastra/output
 COPY --from=build /app/package.json ./package.json
+COPY docker/agent/entry.mjs ./entry.mjs
 
 EXPOSE 8080
 ENV PORT=8080
-CMD ["node", ".mastra/output/index.mjs"]
+CMD ["node", "entry.mjs"]

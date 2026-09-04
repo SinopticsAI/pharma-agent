@@ -49,9 +49,9 @@ yc serverless container revision deploy \
   --concurrency 4 \
   --execution-timeout 300s \
   --network-id "$VPC_NETWORK_ID" \
-  --secret "environment-variable=PG_PASSWORD,id=${LOCKBOX_PG_SECRET_ID},key=pharma_agent_password" \
-  --secret "environment-variable=EDGE_API_KEY,id=${LOCKBOX_APP_SECRET_ID},key=edge_api_key" \
-  --secret "environment-variable=AI_STUDIO_API_KEY,id=${LOCKBOX_APP_SECRET_ID},key=ai_studio_api_key" \
+  --environment "SECRET_BACKEND=lockbox" \
+  --environment "LOCKBOX_PG_SECRET_ID=${LOCKBOX_PG_SECRET_ID}" \
+  --environment "LOCKBOX_APP_SECRET_ID=${LOCKBOX_APP_SECRET_ID}" \
   --environment "FOLDER_ID=${YC_FOLDER_ID}" \
   --environment "EDGE_API_BASE=${EDGE_API_BASE}" \
   --environment "PG_HOST=${PG_HOST}" \
