@@ -70,10 +70,14 @@ async function edge<T>(
   return parsed.data as T;
 }
 
-/** Pulls the caller out of the runtime context Mastra passes to every tool. */
+/** Pulls the caller out of the request context Mastra passes to every tool. */
 function callerOf(context: unknown): CallContext {
-  const runtime = (context as { runtimeContext?: Map<string, unknown> })?.runtimeContext;
-  if (!runtime) return {};
+  const bag = context as {
+    requestContext?: Map<string, unknown>;
+    runtimeContext?: Map<string, unknown>;
+  };
+  const runtime = bag?.requestContext ?? bag?.runtimeContext;
+  if (!runtime?.get) return {};
   return {
     accountId: runtime.get('accountId') as string | undefined,
     subject: runtime.get('subject') as string | undefined,

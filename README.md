@@ -103,12 +103,12 @@ token never reaches the container.
 Push and CI/CD are **operator-owned**. The coding agent must not `git push`,
 trigger GitHub Actions, push images, or run the deploy script. Use the VS Code
 task **Git: auto add+commit+push** (or your own git) when you want a change on
-`main`. Actions always typechecks. On `main`, after typecheck CI publishes the
-image and then deploys a container revision (same tag). Manual
-**deploy-containers** is still there to roll a specific tag.
-Image publish runs only when `YC_SA_JSON` and `REGISTRY_ID` are set in the
-repo secrets; until then those steps are skipped so an empty `docker login`
-does not fail the run.
+`main`. Actions always typechecks. A push to `main` publishes the image and then
+starts **deploy-containers** with that tag — do not run the deploy workflow
+by hand for an ordinary change. `workflow_dispatch` on **deploy-containers**
+is only a rollback to an older tag.
+Image publish on `main` requires `YC_SA_JSON` and `REGISTRY_ID`; without them
+the `image` job fails instead of skipping deploy.
 
 1. `scripts/deploy_containers.sh` builds nothing — CI already pushed the image.
 2. First time only: take `CONTAINER_AGENT_ID` from the deploy summary into

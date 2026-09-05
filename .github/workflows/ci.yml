@@ -23,24 +23,20 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
-      published: ${{ steps.push.outcome == 'success' }}
       tag: ${{ steps.push.outputs.tag }}
-    # Map secrets here (allowed). Job/step `if` cannot read `secrets` directly.
     env:
       YC_SA_JSON: ${{ secrets.YC_SA_JSON }}
       REGISTRY_ID: ${{ secrets.REGISTRY_ID }}
     steps:
-      - name: Skip image publish
+      - name: Require image secrets
         if: env.YC_SA_JSON == '' || env.REGISTRY_ID == ''
         run: |
-          echo "YC_SA_JSON and/or REGISTRY_ID are not set."
-          echo "Image publish skipped. Add both under Settings → Secrets and variables → Actions."
+          echo "::error::YC_SA_JSON and REGISTRY_ID must be set. On main they publish the image and start deploy."
+          exit 1
 
       - uses: actions/checkout@v5
-        if: env.YC_SA_JSON != '' && env.REGISTRY_ID != ''
 
       - name: Login to Yandex Container Registry
-        if: env.YC_SA_JSON != '' && env.REGISTRY_ID != ''
         run: |
           printf '%s\n' "$YC_SA_JSON" > sa.json
           docker login --username json_key --password-stdin cr.yandex < sa.json
@@ -48,7 +44,6 @@ jobs:
 
       - name: Build and push
         id: push
-        if: env.YC_SA_JSON != '' && env.REGISTRY_ID != ''
         run: |
           TAG="${GITHUB_SHA::8}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -58,7 +53,7 @@ jobs:
 
   deploy:
     needs: image
-    if: github.ref == 'refs/heads/main' && needs.image.outputs.published == 'true'
+    if: github.ref == 'refs/heads/main' && needs.image.result == 'success'
     uses: ./.github/workflows/deploy_containers.yml
     with:
       image_tag: ${{ needs.image.outputs.tag }}

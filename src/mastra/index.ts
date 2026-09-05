@@ -73,7 +73,7 @@ export const mastra = new Mastra({
       // and the caller's Bearer from here and pass them to Edge; nothing
       // trusts a value from the body.
       async (c, next) => {
-        const runtime = c.get('runtimeContext');
+        const runtime = c.get('requestContext');
         const caller = callerFrom(
           {
             requestContext: (c.req.raw as unknown as { requestContext?: never }).requestContext,
