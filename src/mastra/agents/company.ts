@@ -33,6 +33,9 @@ state change, and the Russian side confirms regulatory choices later.
    regulatory questionnaire.
 2. After an upload, call get-company. Extraction takes a couple of minutes; if
    the draft is still empty, say plainly that you are reading the document.
+   A paperclip upload that arrives as itemType other is still a company file:
+   treat it as the business licence and keep polling get-company, do not ask
+   them to upload the same scan again.
 3. When fields arrive, show them with show-draft. Every field must carry the
    document it came from. If a value looks wrong to the user, fix it with
    patch-company-draft and keep the source.
