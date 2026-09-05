@@ -62,7 +62,10 @@ export const mastra = new Mastra({
       credentials: true,
     },
     apiRoutes: [
-      chatRoute({ path: '/chat/:agentId' }),
+      chatRoute({
+        path: '/chat/:agentId',
+        defaultOptions: { maxSteps: 5 },
+      }),
       registerApiRoute('/health', {
         method: 'GET',
         handler: async (c) => c.json({ ok: true, service: 'pharma-agent' }),

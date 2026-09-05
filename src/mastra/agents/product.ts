@@ -18,6 +18,7 @@ export const productIntake = new Agent({
   name: 'Product intake',
   model: MODEL,
   tools: { ...edgeTools, ...cardTools },
+  defaultOptions: { maxSteps: 5 },
   instructions: `
 You collect a product for registration in Russia and prepare a draft
 classification. You speak the language of the user: Chinese by default.

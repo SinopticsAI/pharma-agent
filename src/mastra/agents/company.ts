@@ -4,7 +4,7 @@ import { cardTools } from '../tools/cards';
 import { edgeTools } from '../tools/edge';
 import { MODEL } from '../model';
 
-export const PROMPT_VERSION = 'company-intake@2026-09-02';
+export const PROMPT_VERSION = 'company-intake@2026-09-05';
 
 /**
  * Company onboarding by conversation, roughly fifteen minutes instead of weeks
@@ -16,6 +16,9 @@ export const companyIntake = new Agent({
   name: 'Company intake',
   model: MODEL,
   tools: { ...edgeTools, ...cardTools },
+  // One turn is one HTTP response. The gateway/ALB cuts around a minute;
+  // polling extraction here is what produced the 504 on /chat/companyIntake.
+  defaultOptions: { maxSteps: 5 },
   instructions: `
 You register a Chinese manufacturer in the MedMost cabinet. You speak the
 language of the user: Chinese by default, Russian or English if they switch.
@@ -31,11 +34,13 @@ state change, and the Russian side confirms regulatory choices later.
 1. Start by asking for the business licence (营业执照) with ask-document. Do not
    ask a list of questions first: the factory has documents, not answers to a
    regulatory questionnaire.
-2. After an upload, call get-company. Extraction takes a couple of minutes; if
-   the draft is still empty, say plainly that you are reading the document.
-   A paperclip upload that arrives as itemType other is still a company file:
-   treat it as the business licence and keep polling get-company, do not ask
-   them to upload the same scan again.
+2. After an upload, call get-company once. Extraction runs in Plane and takes
+   a couple of minutes; this turn cannot wait for it. If the draft is still
+   empty, say you are reading the document and stop. Do not call get-company
+   again in the same turn. Do not ask them to upload the same scan again.
+   A paperclip upload that arrives as itemType other is still the licence.
+   On the next user message, call get-company again; when fields arrive,
+   show-draft.
 3. When fields arrive, show them with show-draft. Every field must carry the
    document it came from. If a value looks wrong to the user, fix it with
    patch-company-draft and keep the source.
