@@ -27,6 +27,7 @@ interface CallContext {
   accountId?: string;
   subject?: string;
   actor?: string;
+  authorization?: string;
 }
 
 async function edge<T>(
@@ -45,6 +46,10 @@ async function edge<T>(
   if (ctx.accountId) headers['X-Pharma-Account'] = ctx.accountId;
   if (ctx.subject) headers['X-Pharma-Subject'] = ctx.subject;
   if (ctx.actor) headers['X-Pharma-Actor'] = ctx.actor;
+  // /organizations and the rest of the cabinet routes require Keycloak at the
+  // gateway. The service key alone never reaches the function. Replay the
+  // caller's Bearer so the authorizer accepts the tool call.
+  if (ctx.authorization) headers.Authorization = ctx.authorization;
 
   const response = await fetch(`${EDGE_BASE}${path}`, {
     method: init.method ?? 'GET',
@@ -53,7 +58,12 @@ async function edge<T>(
   });
 
   const text = await response.text();
-  const parsed = text ? JSON.parse(text) : {};
+  let parsed: { error?: string; message?: string; data?: T } = {};
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch {
+    parsed = { error: 'edge_error', message: text.slice(0, 300) };
+  }
   if (!response.ok) {
     throw new EdgeError(response.status, parsed.error ?? 'edge_error', parsed.message ?? text);
   }
@@ -68,6 +78,7 @@ function callerOf(context: unknown): CallContext {
     accountId: runtime.get('accountId') as string | undefined,
     subject: runtime.get('subject') as string | undefined,
     actor: runtime.get('displayName') as string | undefined,
+    authorization: runtime.get('authorization') as string | undefined,
   };
 }
 

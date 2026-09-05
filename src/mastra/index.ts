@@ -70,8 +70,10 @@ export const mastra = new Mastra({
     ],
     middleware: [
       // Carry the verified identity into every tool call. Tools read accountId
-      // from here and pass it to Edge; nothing trusts a value from the body.
+      // and the caller's Bearer from here and pass them to Edge; nothing
+      // trusts a value from the body.
       async (c, next) => {
+        const runtime = c.get('runtimeContext');
         const caller = callerFrom(
           {
             requestContext: (c.req.raw as unknown as { requestContext?: never }).requestContext,
@@ -79,16 +81,18 @@ export const mastra = new Mastra({
           },
           c.req.header('X-Pharma-Locale') ?? 'zh',
         );
+        const authorization = c.req.header('Authorization');
+        if (authorization) runtime?.set('authorization', authorization);
+        // Cabinet still sends the tenant on /chat (JWT has no account). Read it
+        // even when authorizer claims did not land in requestContext — that
+        // shape is for Cloud Functions, not this container.
+        const accountId = c.req.header('X-Pharma-Account') ?? caller?.accountId;
+        if (accountId) runtime?.set('accountId', accountId);
         if (caller) {
-          const runtime = c.get('runtimeContext');
           runtime?.set('subject', caller.subject);
           runtime?.set('role', caller.role);
           runtime?.set('displayName', caller.displayName);
           runtime?.set('locale', caller.locale);
-          // accountId is resolved by Edge from the subject; the header is the
-          // only place it is allowed to come from for service calls.
-          const accountId = c.req.header('X-Pharma-Account') ?? caller.accountId;
-          if (accountId) runtime?.set('accountId', accountId);
         }
         await next();
       },

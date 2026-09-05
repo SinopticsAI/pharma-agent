@@ -3,7 +3,10 @@
  *
  * There is no JWKS check here on purpose: the API Gateway JWT authorizer
  * validated the signature, issuer and audience before this container was
- * reached, and it passes the result in requestContext.authorizer.jwt.
+ * reached. Cloud Functions get that in requestContext.authorizer.jwt.
+ * A serverless container gets HTTP: the same payload arrives as
+ * X-Yc-Apigateway-Authorization-Context (Base64), and the original
+ * Authorization header is still on the request.
  *
  * The account is not in the token. Keycloak owns the identity, the product
  * owns tenancy, so `sub` is resolved through Edge.
@@ -31,8 +34,59 @@ interface GatewayEvent {
   headers?: Record<string, string>;
 }
 
+function headerOf(headers: Record<string, string> | undefined, name: string): string {
+  if (!headers) return '';
+  const want = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === want && value) return value;
+  }
+  return '';
+}
+
+function decodeJsonB64(raw: string): unknown {
+  try {
+    const normalized = raw.replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(Buffer.from(normalized, 'base64').toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function asClaims(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function claimsFromAuthorizer(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object') return {};
+  const root = value as Record<string, unknown>;
+  return (
+    asClaims(root.claims) ??
+    asClaims((root.jwt as { claims?: unknown } | undefined)?.claims) ??
+    asClaims((root.authorizer as { jwt?: { claims?: unknown } } | undefined)?.jwt?.claims) ??
+    (typeof root.sub === 'string' ? root : {})
+  );
+}
+
+function claimsFromBearer(authorization: string): Record<string, unknown> {
+  const token = authorization.replace(/^Bearer\s+/i, '');
+  const payload = token.split('.')[1];
+  return payload ? claimsFromAuthorizer(decodeJsonB64(payload)) : {};
+}
+
 export function claimsOf(event: GatewayEvent): Record<string, unknown> {
-  return event?.requestContext?.authorizer?.jwt?.claims ?? {};
+  const fromRc = asClaims(event?.requestContext?.authorizer?.jwt?.claims);
+  if (fromRc && Object.keys(fromRc).length) return fromRc;
+
+  const contextHeader = headerOf(event.headers, 'x-yc-apigateway-authorization-context');
+  if (contextHeader) {
+    const fromHeader = claimsFromAuthorizer(decodeJsonB64(contextHeader));
+    if (Object.keys(fromHeader).length) return fromHeader;
+  }
+
+  const authorization = headerOf(event.headers, 'authorization');
+  if (authorization) return claimsFromBearer(authorization);
+  return {};
 }
 
 export function subjectOf(event: GatewayEvent): string {

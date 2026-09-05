@@ -45,8 +45,10 @@ runtime adapter. That is a separate wave, not this one.
 
 The gateway runs a JWT authorizer against realm `pharma` on
 `auth.sinoptics.ru`, so by the time a request reaches this container the
-signature, issuer and audience are already checked. The container reads
-`requestContext.authorizer.jwt` and does not verify anything itself.
+signature, issuer and audience are already checked. Claims arrive as
+`X-Yc-Apigateway-Authorization-Context` (the container is HTTP, not a Cloud
+Function event). Tool calls replay the caller's `Authorization` so they pass
+the same authorizer on `/organizations` and the rest of the cabinet routes.
 
 The account is **not** in the token. Keycloak owns the identity, the product
 owns tenancy: Edge resolves `sub` through `account_users`. Roles come from the
