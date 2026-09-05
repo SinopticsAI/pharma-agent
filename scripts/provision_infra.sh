@@ -57,7 +57,8 @@ ensure_binding pharma-agent-sa vpc.user
 
 ensure_binding pharma-agent-sa-ci container-registry.images.pusher
 ensure_binding pharma-agent-sa-ci serverless-containers.editor
-ensure_binding pharma-agent-sa-ci functions.editor
+ensure_binding pharma-agent-sa-ci serverless-containers.admin
+ensure_binding pharma-agent-sa-ci vpc.user
 ensure_binding pharma-agent-sa-ci iam.serviceAccounts.user
 ensure_binding pharma-agent-sa-ci lockbox.payloadViewer
 ensure_binding pharma-agent-sa-ci kms.keys.encrypterDecrypter

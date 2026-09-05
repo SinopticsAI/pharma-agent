@@ -16,6 +16,8 @@ IMAGE_TAG="${IMAGE_TAG:-latest}"
 LOCKBOX_SECRET_ID="${LOCKBOX_SECRET_ID:-}"
 LOCKBOX_PG_SECRET_ID="${LOCKBOX_PG_SECRET_ID:-$LOCKBOX_SECRET_ID}"
 LOCKBOX_APP_SECRET_ID="${LOCKBOX_APP_SECRET_ID:-$LOCKBOX_SECRET_ID}"
+LOCKBOX_PG_SECRET_ID="${LOCKBOX_PG_SECRET_ID//[[:space:]]/}"
+LOCKBOX_APP_SECRET_ID="${LOCKBOX_APP_SECRET_ID//[[:space:]]/}"
 : "${LOCKBOX_PG_SECRET_ID:?set LOCKBOX_PG_SECRET_ID (holds pharma_agent_password) or LOCKBOX_SECRET_ID}"
 : "${LOCKBOX_APP_SECRET_ID:?set LOCKBOX_APP_SECRET_ID (holds edge_api_key and ai_studio_api_key) or LOCKBOX_SECRET_ID}"
 VPC_NETWORK_ID="${VPC_NETWORK_ID:?}"
@@ -59,6 +61,8 @@ yc serverless container revision deploy \
   --environment "PG_DATABASE=pharma_agent" \
   --environment "PG_USER=pharma_agent" \
   --environment "PG_SSLMODE=verify-full" \
+  --environment "PGSSLROOTCERT=/usr/local/share/ca-certificates/yandex-root.crt" \
+  --environment "NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/yandex-root.crt" \
   --environment "AI_STUDIO_BASE_URL=https://llm.api.cloud.yandex.net/v1" \
   --environment "AGENT_MODEL=${AGENT_MODEL}" \
   >/dev/null
@@ -71,7 +75,7 @@ if [[ -n "$SA_GATEWAY_ID" ]]; then
   yc serverless container add-access-binding \
     --name "$NAME" \
     --role serverless-containers.containerInvoker \
-    --service-account-id "$SA_GATEWAY_ID" >/dev/null 2>&1 || true
+    --service-account-id "$SA_GATEWAY_ID"
   echo "  invoker binding for gateway SA ensured"
 fi
 

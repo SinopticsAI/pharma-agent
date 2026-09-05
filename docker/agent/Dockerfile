@@ -24,7 +24,9 @@ RUN apt-get update \
  && update-ca-certificates \
  && apt-get purge -y curl \
  && rm -rf /var/lib/apt/lists/*
+ENV PGSSLROOTCERT=/usr/local/share/ca-certificates/yandex-root.crt
 ENV PG_SSLROOTCERT=/usr/local/share/ca-certificates/yandex-root.crt
+ENV NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/yandex-root.crt
 
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/.mastra/output ./.mastra/output

@@ -31,5 +31,7 @@ containers:
       PG_DATABASE: pharma_agent
       PG_USER: pharma_agent
       PG_SSLMODE: verify-full
+      PGSSLROOTCERT: /usr/local/share/ca-certificates/yandex-root.crt
+      NODE_EXTRA_CA_CERTS: /usr/local/share/ca-certificates/yandex-root.crt
       AI_STUDIO_BASE_URL: https://llm.api.cloud.yandex.net/v1
       AGENT_MODEL: ${AGENT_MODEL}

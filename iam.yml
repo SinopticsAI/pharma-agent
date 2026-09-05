@@ -16,8 +16,8 @@ service_accounts:
     roles:
       - container-registry.images.pusher
       - serverless-containers.editor
-      # --secret on a container revision is checked as a functions permission.
-      - functions.editor
+      - serverless-containers.admin
+      - vpc.user
       - iam.serviceAccounts.user
       - lockbox.payloadViewer
       - kms.keys.encrypterDecrypter

@@ -34,7 +34,13 @@ function connectionString(): string {
   const user = process.env.PG_USER ?? 'pharma_agent';
   const password = process.env.PG_PASSWORD ?? '';
   const sslmode = process.env.PG_SSLMODE ?? 'verify-full';
-  return `postgresql://${user}:${encodeURIComponent(password)}@${host}:${port}/${database}?sslmode=${sslmode}`;
+  // Node's tls bundle does not include the Yandex MDB CA. Edge passes
+  // sslrootcert the same way; without it verify-full dies as SELF_SIGNED_CERT_IN_CHAIN.
+  const rootcert =
+    process.env.PGSSLROOTCERT || process.env.PG_SSLROOTCERT || '';
+  let dsn = `postgresql://${user}:${encodeURIComponent(password)}@${host}:${port}/${database}?sslmode=${sslmode}`;
+  if (rootcert) dsn += `&sslrootcert=${rootcert}`;
+  return dsn;
 }
 
 const storage = new PostgresStore({

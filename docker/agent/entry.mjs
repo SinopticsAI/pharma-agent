@@ -42,8 +42,8 @@ async function secretEntries(secretId, token) {
 
 async function hydrate() {
   if ((process.env.SECRET_BACKEND ?? "") !== "lockbox") return;
-  const pgId = process.env.LOCKBOX_PG_SECRET_ID || process.env.LOCKBOX_SECRET_ID || "";
-  const appId = process.env.LOCKBOX_APP_SECRET_ID || process.env.LOCKBOX_SECRET_ID || "";
+  const pgId = (process.env.LOCKBOX_PG_SECRET_ID || process.env.LOCKBOX_SECRET_ID || "").trim();
+  const appId = (process.env.LOCKBOX_APP_SECRET_ID || process.env.LOCKBOX_SECRET_ID || "").trim();
   if (!pgId && !appId) return;
 
   const token = await iamToken();
