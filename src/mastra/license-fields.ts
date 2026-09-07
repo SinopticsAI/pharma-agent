@@ -7,6 +7,9 @@
 const USCC_RE = /(?<![0-9A-Za-z])([0-9A-Z]{18})(?![0-9A-Za-z])/;
 const NAME_RE =
   /(?:名称|企业名称|公司名称|单位名称)\s*[:：]?\s*([^\n]{2,80}?(?:有限公司|公司|集团|厂|中心))/;
+const COMPANY_LINE_RE =
+  /(?:^|\n)\s*([\u4e00-\u9fffA-Za-z0-9·（）()]{2,40}(?:有限责任公司|股份有限公司|有限公司))/;
+const NAME_NOISE_RE = /法定代表人|经营范围|统一社会|注册资本|成立日期|住所|营业期限/;
 
 const COMPANY_NAME_KEYS = ['company_name', '名称', '企业名称', '公司名称', '单位名称'] as const;
 const USCC_KEYS = [
@@ -90,6 +93,11 @@ export function recoverLicenseFields(ocrText: string, extracted: unknown): Extra
   if (!name) {
     const match = NAME_RE.exec(ocrText || '');
     if (match?.[1]) name = match[1].replace(/[ 、,;；]+$/g, '').replace(/^[ 、,;；]+/g, '');
+  }
+  if (!name) {
+    const match = COMPANY_LINE_RE.exec(ocrText || '');
+    const candidate = (match?.[1] ?? '').trim();
+    if (candidate && !NAME_NOISE_RE.test(candidate)) name = candidate;
   }
   if (name) out.company_name = name;
 

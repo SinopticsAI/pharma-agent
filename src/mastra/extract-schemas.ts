@@ -24,7 +24,7 @@ export type ItemType = (typeof ITEM_TYPES)[number];
 
 export const SCHEMA_HINTS: Record<ItemType, string> = {
   'business-license':
-    'Chinese business licence 营业执照. JSON keys MUST be English snake_case. Extract: company_name from 名称 (legal entity name as printed, keep Chinese; never 法定代表人), company_name_en if present, unified_social_credit_code (统一社会信用代码 / 注册号, 18 characters), legal_representative (法定代表人), registered_capital, establishment_date, registered_address, business_scope. If 名称 is readable, company_name must not be null.',
+    'Chinese business licence 营业执照. JSON keys MUST be English snake_case. Extract: company_name from 名称 (legal entity name as printed, keep Chinese; never 法定代表人; the name is often on the next line under 名称), company_name_en if present, unified_social_credit_code (统一社会信用代码 / 注册号, 18 characters), legal_representative (法定代表人), registered_capital, establishment_date, registered_address, business_scope. If 名称 is readable, company_name must not be null. A code without a name is incomplete, not unreadable.',
   'company-registry':
     'Extract: company_name, unified_social_credit_code, status, checked_on, source.',
   'iso-13485':

@@ -189,7 +189,7 @@ export const requestUpload = createTool({
 export const listDocuments = createTool({
   id: 'list-documents',
   description:
-    'Documents of a company and its products, with extraction results. Use it before asking for a file: a company document is never uploaded twice.',
+    'Documents of a company and its products, with extraction results. Use it before asking for a file: a company document is never uploaded twice. When several files share an itemType, only the newest updatedAt matters — ignore older rejected office files.',
   inputSchema: z.object({ organizationId: z.string().optional() }),
   execute: async ({ organizationId }, context) =>
     edge(`/organizations/${resolveOrganizationId(organizationId, context)}/items`, {}, callerOf(context)),

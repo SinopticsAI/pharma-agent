@@ -71,6 +71,14 @@ describe('recoverLicenseFields', () => {
     assert.equal(out.company_name, '杭州信纳智析科技有限公司');
     assert.equal(out.unified_social_credit_code, '91330106MAK20KYJ17');
   });
+
+  it('reads a company line even when the 名称 label was dropped', () => {
+    const out = recoverLicenseFields(
+      ['91330106MAK20KYJ17', '杭州信纳智析科技有限公司', '法定代表人 潘银洁'].join('\n'),
+      { company_name: null },
+    );
+    assert.equal(out.company_name, '杭州信纳智析科技有限公司');
+  });
 });
 
 describe('normalizeVisionFields', () => {

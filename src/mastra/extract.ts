@@ -110,7 +110,7 @@ function visionPrompt(hintedType: string): string {
     `The uploader labelled this file as "${hintedType}". If it is a 营业执照, itemType is business-license even when the label is other.`,
     schemaHint(hintedType),
     'extracted: object of English snake_case keys to string values or null. Do not invent a name or a registration number.',
-    'unreadable: true when almost nothing can be read (a code without 名称, or all empty).',
+    'unreadable: true only when nothing usable can be read. A unified social credit code without 名称 is incomplete, not unreadable.',
     'reason: short English note when unreadable or when itemType is other.',
     '/no_think',
   ].join('\n');
