@@ -24,22 +24,38 @@ import { productIntake } from './agents/product';
 import { callerFrom } from './auth/claims';
 import { localeOf, type Locale } from './locale';
 
-async function localeFromRequest(c: { req: { method: string; header: (name: string) => string | undefined; raw: Request } }): Promise<Locale> {
+type ChatHints = { locale: Locale; organizationId: string; productId: string };
+
+function asId(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+async function chatHintsFromRequest(c: {
+  req: { method: string; header: (name: string) => string | undefined; raw: Request };
+}): Promise<ChatHints> {
+  let locale: Locale | undefined;
+  let organizationId = '';
+  let productId = '';
   const header = c.req.header('X-Pharma-Locale');
-  if (header === 'zh' || header === 'en' || header === 'ru') return header;
+  if (header === 'zh' || header === 'en' || header === 'ru') locale = header;
   if (c.req.method === 'POST') {
     try {
       const body = (await c.req.raw.clone().json()) as {
-        data?: { locale?: unknown };
-        requestContext?: { locale?: unknown };
+        data?: { locale?: unknown; organizationId?: unknown; productId?: unknown };
+        requestContext?: { locale?: unknown; organizationId?: unknown; productId?: unknown };
       };
-      const fromBody = body.data?.locale ?? body.requestContext?.locale;
-      if (fromBody !== undefined) return localeOf(fromBody);
+      const data = body.data ?? {};
+      const rc = body.requestContext ?? {};
+      if (locale === undefined && (data.locale ?? rc.locale) !== undefined) {
+        locale = localeOf(data.locale ?? rc.locale);
+      }
+      organizationId = asId(data.organizationId) || asId(rc.organizationId);
+      productId = asId(data.productId) || asId(rc.productId);
     } catch {
       // Chat route still needs the original body; a non-JSON POST is not ours.
     }
   }
-  return 'zh';
+  return { locale: locale ?? 'zh', organizationId, productId };
 }
 
 function connectionString(): string {
@@ -96,7 +112,8 @@ export const mastra = new Mastra({
       // trusts a value from the body.
       async (c, next) => {
         const runtime = c.get('requestContext');
-        const locale = await localeFromRequest(c);
+        const hints = await chatHintsFromRequest(c);
+        const locale = hints.locale;
         const caller = callerFrom(
           {
             requestContext: (c.req.raw as unknown as { requestContext?: never }).requestContext,
@@ -119,6 +136,8 @@ export const mastra = new Mastra({
         } else {
           runtime?.set('locale', locale);
         }
+        if (hints.organizationId) runtime?.set('organizationId', hints.organizationId);
+        if (hints.productId) runtime?.set('productId', hints.productId);
         await next();
       },
     ],

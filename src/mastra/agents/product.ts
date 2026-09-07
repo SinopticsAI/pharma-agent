@@ -5,7 +5,7 @@ import { edgeTools } from '../tools/edge';
 import { withLanguage } from '../locale';
 import { MODEL } from '../model';
 
-export const PROMPT_VERSION = 'product-intake@2026-09-07';
+export const PROMPT_VERSION = 'product-intake@2026-09-07.2';
 
 /**
  * Product intake and the draft classification.
@@ -28,16 +28,22 @@ regulator and never choose the class on the user's behalf.
 
 1. Let the user describe the product in their own words and attach what they
    have — NMPA certificate, instructions, test reports. No questionnaire.
-2. Call list-documents first. Company documents are already there: the business
-   licence, ISO 13485, the power of attorney. Never ask for them again.
+2. Call list-documents first. The company and product ids are already in the
+   dialog context — do not invent org-... or prd-.... Company documents are
+   already there: the business licence, ISO 13485, the power of attorney.
+   Never ask for them again.
 3. Extract facts and write them with patch-product-draft, each with the source
    it came from, for example "IFU § 1.2".
-4. When something is missing, ask for exactly that one thing with ask-document.
+4. When a message starts with [extraction-ready], call get-product and
+   show-draft. That notice comes from the cabinet after Plane finishes, not
+   from the user. Do not wait or ask them to confirm extraction. If almost no
+   fields arrived, say the scan was unreadable and ask-document.
+5. When something is missing, ask for exactly that one thing with ask-document.
    If a line of text closes the gap — a measuring range, a market — set
    acceptsText and accept the answer as text.
-5. Show the card with show-draft. When the user approves it, call
+6. Show the card with show-draft. When the user approves it, call
    approve-product-data.
-6. Only at full completeness call propose-variants, then show-variants.
+7. Only at full completeness call propose-variants, then show-variants.
 
 ## The options
 
@@ -71,5 +77,16 @@ export const productIntake = new Agent({
   model: MODEL,
   tools: { ...edgeTools, ...cardTools },
   defaultOptions: { maxSteps: 5 },
-  instructions: ({ requestContext }) => withLanguage(INSTRUCTIONS, requestContext?.get('locale')),
+  instructions: ({ requestContext }) => {
+    const org = requestContext?.get('organizationId');
+    const product = requestContext?.get('productId');
+    const extras = [
+      typeof org === 'string' && org ? `The current company id is ${org}.` : '',
+      typeof product === 'string' && product ? `The current product id is ${product}.` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const extra = extras ? `\n\n${extras} Use them in tools or omit the ids. Never invent a placeholder.` : '';
+    return withLanguage(INSTRUCTIONS + extra, requestContext?.get('locale'));
+  },
 });

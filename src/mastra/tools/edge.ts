@@ -70,25 +70,64 @@ async function edge<T>(
   return parsed.data as T;
 }
 
+function runtimeOf(context: unknown): Map<string, unknown> | undefined {
+  const bag = context as {
+    requestContext?: Map<string, unknown>;
+    runtimeContext?: Map<string, unknown>;
+  };
+  return bag?.requestContext ?? bag?.runtimeContext;
+}
+
+function contextValue(context: unknown, key: string): string {
+  const runtime = runtimeOf(context);
+  const value = runtime?.get?.(key);
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function isUnsetOrganizationId(id: string): boolean {
+  const trimmed = id.trim();
+  return !trimmed || trimmed === 'org-...' || trimmed === 'org-…' || /^org-\.+$/i.test(trimmed);
+}
+
+function isUnsetProductId(id: string): boolean {
+  const trimmed = id.trim();
+  return !trimmed || trimmed === 'prd-...' || trimmed === 'prd-…' || /^prd-\.+$/i.test(trimmed);
+}
+
 function organizationIdOf(organizationId: string): string {
   const id = organizationId.trim();
+  if (isUnsetOrganizationId(id)) {
+    throw new EdgeError(400, 'missing_organization', 'organizationId is not set in the dialog context');
+  }
   if (id.startsWith('it-')) {
     throw new EdgeError(
       400,
       'wrong_id',
-      `${id} is a document itemId. Use the company id (org-...), from the upload text or list-companies.`,
+      `${id} is a document itemId. Use the company id from the dialog context, not an itemId.`,
     );
   }
   return id;
 }
 
+function resolveOrganizationId(input: string | undefined, context: unknown): string {
+  const fromCtx = contextValue(context, 'organizationId');
+  const raw = (input ?? '').trim();
+  return organizationIdOf(!isUnsetOrganizationId(fromCtx) ? fromCtx : raw);
+}
+
+function resolveProductId(input: string | undefined, context: unknown): string {
+  const fromCtx = contextValue(context, 'productId');
+  const raw = (input ?? '').trim();
+  const chosen = fromCtx || raw;
+  if (isUnsetProductId(chosen)) {
+    throw new EdgeError(400, 'missing_product', 'productId is not set in the dialog context');
+  }
+  return chosen;
+}
+
 /** Pulls the caller out of the request context Mastra passes to every tool. */
 function callerOf(context: unknown): CallContext {
-  const bag = context as {
-    requestContext?: Map<string, unknown>;
-    runtimeContext?: Map<string, unknown>;
-  };
-  const runtime = bag?.requestContext ?? bag?.runtimeContext;
+  const runtime = runtimeOf(context);
   if (!runtime?.get) return {};
   return {
     accountId: runtime.get('accountId') as string | undefined,
@@ -105,10 +144,10 @@ const L10n = z.object({ ru: z.string(), en: z.string().optional(), zh: z.string(
 export const getCompany = createTool({
   id: 'get-company',
   description:
-    'Read a company: draft fields with their sources, approved profile, checklist slots and completeness by section.',
-  inputSchema: z.object({ organizationId: z.string() }),
+    'Read a company: draft fields with their sources, approved profile, checklist slots and completeness by section. The current company id is already in the dialog — do not invent org-....',
+  inputSchema: z.object({ organizationId: z.string().optional() }),
   execute: async ({ organizationId }, context) =>
-    edge(`/organizations/${organizationIdOf(organizationId)}`, {}, callerOf(context)),
+    edge(`/organizations/${resolveOrganizationId(organizationId, context)}`, {}, callerOf(context)),
 });
 
 export const listCompanies = createTool({
@@ -131,37 +170,39 @@ export const requestUpload = createTool({
   description:
     'Ask for a presigned PUT so the browser can upload a document itself. Pass productId only when the file belongs to one product rather than the company.',
   inputSchema: z.object({
-    organizationId: z.string(),
+    organizationId: z.string().optional(),
     itemType: z.string(),
     fileName: z.string(),
     contentType: z.string().optional(),
     productId: z.string().optional(),
   }),
-  execute: async (input, context) =>
-    edge(
-      `/organizations/${organizationIdOf(input.organizationId)}/items/upload-url`,
-      { method: 'POST', body: input },
+  execute: async (input, context) => {
+    const organizationId = resolveOrganizationId(input.organizationId, context);
+    return edge(
+      `/organizations/${organizationId}/items/upload-url`,
+      { method: 'POST', body: { ...input, organizationId } },
       callerOf(context),
-    ),
+    );
+  },
 });
 
 export const listDocuments = createTool({
   id: 'list-documents',
   description:
     'Documents of a company and its products, with extraction results. Use it before asking for a file: a company document is never uploaded twice.',
-  inputSchema: z.object({ organizationId: z.string() }),
+  inputSchema: z.object({ organizationId: z.string().optional() }),
   execute: async ({ organizationId }, context) =>
-    edge(`/organizations/${organizationIdOf(organizationId)}/items`, {}, callerOf(context)),
+    edge(`/organizations/${resolveOrganizationId(organizationId, context)}/items`, {}, callerOf(context)),
 });
 
 export const promoteToCompanyProfile = createTool({
   id: 'promote-to-company-profile',
   description:
     'Raise a document first seen in a product dialog to the company profile so every product of that company inherits it.',
-  inputSchema: z.object({ organizationId: z.string(), itemId: z.string() }),
+  inputSchema: z.object({ organizationId: z.string().optional(), itemId: z.string() }),
   execute: async ({ organizationId, itemId }, context) =>
     edge(
-      `/organizations/${organizationIdOf(organizationId)}/items/${itemId}/promote`,
+      `/organizations/${resolveOrganizationId(organizationId, context)}/items/${itemId}/promote`,
       { method: 'POST' },
       callerOf(context),
     ),
@@ -172,7 +213,7 @@ export const patchCompanyDraft = createTool({
   description:
     'Correct a recognised field the user disagreed with. Keep the source so the card stays checkable.',
   inputSchema: z.object({
-    organizationId: z.string(),
+    organizationId: z.string().optional(),
     draft: z.record(
       z.object({
         value: z.string(),
@@ -182,17 +223,21 @@ export const patchCompanyDraft = createTool({
     ),
   }),
   execute: async ({ organizationId, draft }, context) =>
-    edge(`/organizations/${organizationIdOf(organizationId)}`, { method: 'PATCH', body: { draft } }, callerOf(context)),
+    edge(
+      `/organizations/${resolveOrganizationId(organizationId, context)}`,
+      { method: 'PATCH', body: { draft } },
+      callerOf(context),
+    ),
 });
 
 export const approveCompanyProfile = createTool({
   id: 'approve-company-profile',
   description:
     'Record that the user approved the company card. Requires human confirmation and must never be called on the user behalf.',
-  inputSchema: z.object({ organizationId: z.string() }),
+  inputSchema: z.object({ organizationId: z.string().optional() }),
   execute: async ({ organizationId }, context) =>
     edge(
-      `/organizations/${organizationIdOf(organizationId)}`,
+      `/organizations/${resolveOrganizationId(organizationId, context)}`,
       { method: 'PATCH', body: { status: 'profile_approved' } },
       callerOf(context),
     ),
@@ -202,9 +247,9 @@ export const getRiskReport = createTool({
   id: 'get-risk-report',
   description:
     'Risk level and the neutral reasoning for a company. Raw Chinese sources are never returned and must not be requested.',
-  inputSchema: z.object({ organizationId: z.string() }),
+  inputSchema: z.object({ organizationId: z.string().optional() }),
   execute: async ({ organizationId }, context) =>
-    edge(`/organizations/${organizationIdOf(organizationId)}/risk`, {}, callerOf(context)),
+    edge(`/organizations/${resolveOrganizationId(organizationId, context)}/risk`, {}, callerOf(context)),
 });
 
 // ------------------------------------------------------------------ product --
@@ -213,20 +258,25 @@ export const createProduct = createTool({
   id: 'create-product',
   description: 'Open a product card. Only possible once the company profile is approved.',
   inputSchema: z.object({
-    organizationId: z.string(),
+    organizationId: z.string().optional(),
     name: z.string().optional(),
     kind: z.enum(['device', 'drug']).optional(),
   }),
   execute: async ({ organizationId, ...body }, context) =>
-    edge(`/organizations/${organizationIdOf(organizationId)}/products`, { method: 'POST', body }, callerOf(context)),
+    edge(
+      `/organizations/${resolveOrganizationId(organizationId, context)}/products`,
+      { method: 'POST', body },
+      callerOf(context),
+    ),
 });
 
 export const getProduct = createTool({
   id: 'get-product',
   description:
     'Read a product with its inherited documents, missing fields, completeness and classification options.',
-  inputSchema: z.object({ productId: z.string() }),
-  execute: async ({ productId }, context) => edge(`/products/${productId}`, {}, callerOf(context)),
+  inputSchema: z.object({ productId: z.string().optional() }),
+  execute: async ({ productId }, context) =>
+    edge(`/products/${resolveProductId(productId, context)}`, {}, callerOf(context)),
 });
 
 export const patchProductDraft = createTool({
@@ -234,7 +284,7 @@ export const patchProductDraft = createTool({
   description:
     'Write recognised or user-supplied product facts. A one-line answer is as valid as a file.',
   inputSchema: z.object({
-    productId: z.string(),
+    productId: z.string().optional(),
     draft: z.record(
       z.object({
         value: z.string(),
@@ -246,15 +296,19 @@ export const patchProductDraft = createTool({
     kind: z.enum(['device', 'drug']).optional(),
   }),
   execute: async ({ productId, ...body }, context) =>
-    edge(`/products/${productId}`, { method: 'PATCH', body }, callerOf(context)),
+    edge(`/products/${resolveProductId(productId, context)}`, { method: 'PATCH', body }, callerOf(context)),
 });
 
 export const approveProductData = createTool({
   id: 'approve-product-data',
   description: 'Record that the user approved the product card. Requires human confirmation.',
-  inputSchema: z.object({ productId: z.string() }),
+  inputSchema: z.object({ productId: z.string().optional() }),
   execute: async ({ productId }, context) =>
-    edge(`/products/${productId}`, { method: 'PATCH', body: { status: 'data_approved' } }, callerOf(context)),
+    edge(
+      `/products/${resolveProductId(productId, context)}`,
+      { method: 'PATCH', body: { status: 'data_approved' } },
+      callerOf(context),
+    ),
 });
 
 export const proposeVariants = createTool({
@@ -262,7 +316,7 @@ export const proposeVariants = createTool({
   description:
     'Write classification options. Only allowed at full completeness. Include a forbidden option with a reason whenever a tempting wrong class exists — it is shown as a warning and cannot be selected.',
   inputSchema: z.object({
-    productId: z.string(),
+    productId: z.string().optional(),
     model: z.string().optional(),
     promptVersion: z.string().optional(),
     variants: z
@@ -289,7 +343,7 @@ export const proposeVariants = createTool({
       .min(1),
   }),
   execute: async ({ productId, ...body }, context) =>
-    edge(`/products/${productId}/variants`, { method: 'POST', body }, callerOf(context)),
+    edge(`/products/${resolveProductId(productId, context)}/variants`, { method: 'POST', body }, callerOf(context)),
 });
 
 export const approveClassification = createTool({
@@ -297,13 +351,13 @@ export const approveClassification = createTool({
   description:
     'Record an approval of the classification. The specialist confirms first and the client second; the case and its node map appear only after both.',
   inputSchema: z.object({
-    productId: z.string(),
+    productId: z.string().optional(),
     as: z.enum(['specialist', 'client']),
     variantId: z.string().optional(),
     checkedAgainst: z.string().optional(),
   }),
   execute: async ({ productId, ...body }, context) =>
-    edge(`/products/${productId}/approve`, { method: 'POST', body }, callerOf(context)),
+    edge(`/products/${resolveProductId(productId, context)}/approve`, { method: 'POST', body }, callerOf(context)),
 });
 
 // -------------------------------------------------------------------- case ---
