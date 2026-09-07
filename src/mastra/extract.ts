@@ -6,6 +6,7 @@
 
 import { extractFailureReason } from './extract-reason';
 import { imageKind, schemaHint, isItemType, type ItemType } from './extract-schemas';
+import { normalizeVisionFields } from './license-fields';
 import { MODEL_ID } from './model';
 import { edge, EdgeError, type CallContext } from './tools/edge';
 
@@ -140,24 +141,14 @@ function messageText(raw: unknown): string {
 }
 
 function parseVision(raw: string): VisionResult {
-  const parsed = JSON.parse(firstJsonObject(raw)) as {
-    itemType?: unknown;
-    extracted?: unknown;
-    unreadable?: unknown;
-    reason?: unknown;
-  };
-  const itemType = typeof parsed.itemType === 'string' && isItemType(parsed.itemType) ? parsed.itemType : 'other';
-  const extracted: Record<string, string | null> = {};
-  if (parsed.extracted && typeof parsed.extracted === 'object' && !Array.isArray(parsed.extracted)) {
-    for (const [key, value] of Object.entries(parsed.extracted as Record<string, unknown>)) {
-      if (value === null || value === undefined || value === '') extracted[key] = null;
-      else extracted[key] = String(value);
-    }
-  }
+  const parsed = JSON.parse(firstJsonObject(raw)) as Record<string, unknown>;
+  const itemType =
+    typeof parsed.itemType === 'string' && isItemType(parsed.itemType) ? parsed.itemType : 'other';
+  const { extracted, unreadable } = normalizeVisionFields(parsed);
   return {
     itemType,
     extracted,
-    unreadable: Boolean(parsed.unreadable),
+    unreadable,
     reason: typeof parsed.reason === 'string' ? parsed.reason : undefined,
   };
 }
@@ -243,9 +234,22 @@ export async function extractDocument(input: ExtractInput): Promise<ExtractResul
     const scan = await readScan(ticket.url);
     const kind = imageKind(item.fileName || ticket.fileName, scan.contentType);
     if (!kind.ok) {
+      const reason = 'need a photo (jpeg/png/webp), not a PDF or office file';
+      console.log(
+        '[EXTRACT]',
+        JSON.stringify({
+          itemId,
+          organizationId,
+          bytes: scan.bytes.byteLength,
+          unreadable: true,
+          keys: [],
+          reason,
+          status: 'rejected',
+        }),
+      );
       await writeItem(organizationId, itemId, input.caller, {
         status: 'rejected',
-        parced: { status: 'rejected', reason: 'need a photo (jpeg/png/webp), not a PDF or office file' },
+        parced: { status: 'rejected', reason },
       });
       return { itemId, status: 'rejected', itemType: item.itemType, unreadable: true };
     }
@@ -253,6 +257,20 @@ export async function extractDocument(input: ExtractInput): Promise<ExtractResul
     const vision = await callQwen(kind.mime, scan.bytes, item.itemType, controller.signal);
     const itemType = vision.itemType;
     const status = vision.unreadable ? 'rejected' : 'parsed';
+    console.log(
+      '[EXTRACT]',
+      JSON.stringify({
+        itemId,
+        organizationId,
+        mime: kind.mime,
+        bytes: scan.bytes.byteLength,
+        itemType,
+        unreadable: vision.unreadable,
+        keys: Object.keys(vision.extracted),
+        reason: vision.reason,
+        status,
+      }),
+    );
     await writeItem(organizationId, itemId, input.caller, {
       status,
       itemType,
@@ -270,6 +288,17 @@ export async function extractDocument(input: ExtractInput): Promise<ExtractResul
     return { itemId, status, itemType, unreadable: vision.unreadable };
   } catch (error) {
     const reason = extractFailureReason(error);
+    console.log(
+      '[EXTRACT]',
+      JSON.stringify({
+        itemId,
+        organizationId,
+        unreadable: true,
+        keys: [],
+        reason,
+        status: 'rejected',
+      }),
+    );
     await writeItem(organizationId, itemId, input.caller, {
       status: 'rejected',
       parced: { status: 'rejected', reason },

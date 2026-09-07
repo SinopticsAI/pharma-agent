@@ -3,6 +3,13 @@ import { describe, it } from 'node:test';
 
 import { extractFailureReason } from './extract-reason.ts';
 import { imageKind, isItemType, schemaHint } from './extract-schemas.ts';
+import {
+  collectExtracted,
+  hasExtractedValue,
+  hasLicenseIdentity,
+  normalizeVisionFields,
+  recoverLicenseFields,
+} from './license-fields.ts';
 
 describe('imageKind', () => {
   it('accepts jpeg/png/webp by mime or extension', () => {
@@ -37,5 +44,76 @@ describe('extract schemas', () => {
     assert.equal(isItemType('business-license'), true);
     assert.match(schemaHint('business-license'), /company_name/);
     assert.match(schemaHint('other'), /营业执照/);
+  });
+});
+
+describe('recoverLicenseFields', () => {
+  it('copies 名称 and 注册号 onto English keys', () => {
+    const out = recoverLicenseFields('', {
+      名称: '杭州信纳智析科技有限公司',
+      注册号: '91330106MAK20KYJ17',
+    });
+    assert.equal(out.company_name, '杭州信纳智析科技有限公司');
+    assert.equal(out.unified_social_credit_code, '91330106MAK20KYJ17');
+    assert.equal(hasLicenseIdentity(out), true);
+  });
+
+  it('reads 名称 from dumped OCR when the model left company_name null', () => {
+    const text = [
+      '统一社会信用代码 91330106MAK20KYJ17',
+      '名称 杭州信纳智析科技有限公司',
+      '法定代表人 潘银洁',
+    ].join('\n');
+    const out = recoverLicenseFields(text, {
+      company_name: null,
+      unified_social_credit_code: null,
+    });
+    assert.equal(out.company_name, '杭州信纳智析科技有限公司');
+    assert.equal(out.unified_social_credit_code, '91330106MAK20KYJ17');
+  });
+});
+
+describe('normalizeVisionFields', () => {
+  it('keeps root-level Chinese keys when extracted is missing', () => {
+    const vision = normalizeVisionFields({
+      itemType: 'business-license',
+      unreadable: true,
+      名称: '杭州信纳智析科技有限公司',
+      注册号: '91330106MAK20KYJ17',
+    });
+    assert.equal(vision.extracted.company_name, '杭州信纳智析科技有限公司');
+    assert.equal(vision.extracted.unified_social_credit_code, '91330106MAK20KYJ17');
+    assert.equal(vision.unreadable, false);
+  });
+
+  it('parses when only a USCC survived recover', () => {
+    const vision = normalizeVisionFields({
+      itemType: 'business-license',
+      unreadable: true,
+      extracted: { unified_social_credit_code: '91330106MAK20KYJ17', company_name: null },
+    });
+    assert.equal(vision.unreadable, false);
+    assert.equal(vision.extracted.unified_social_credit_code, '91330106MAK20KYJ17');
+  });
+
+  it('stays unreadable when recover finds nothing', () => {
+    const vision = normalizeVisionFields({
+      itemType: 'other',
+      unreadable: false,
+      extracted: { company_name: null, unified_social_credit_code: null },
+    });
+    assert.equal(vision.unreadable, true);
+    assert.equal(hasExtractedValue(vision.extracted), false);
+  });
+
+  it('lets nested extracted win over a root-level empty name', () => {
+    const collected = collectExtracted({
+      itemType: 'business-license',
+      unreadable: true,
+      名称: '杭州信纳智析科技有限公司',
+      extracted: { company_name: '杭州信纳智析科技有限公司', unified_social_credit_code: '91330106MAK20KYJ17' },
+    });
+    assert.equal(collected.company_name, '杭州信纳智析科技有限公司');
+    assert.equal(collected.unified_social_credit_code, '91330106MAK20KYJ17');
   });
 });
