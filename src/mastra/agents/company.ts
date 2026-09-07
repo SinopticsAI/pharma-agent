@@ -5,7 +5,7 @@ import { edgeTools } from '../tools/edge';
 import { withLanguage } from '../locale';
 import { MODEL } from '../model';
 
-export const PROMPT_VERSION = 'company-intake@2026-09-07.4';
+export const PROMPT_VERSION = 'company-intake@2026-09-07.5';
 
 /**
  * Company onboarding by conversation, roughly fifteen minutes instead of weeks
@@ -38,11 +38,15 @@ state change, and the Russian side confirms regulatory choices later.
    Do not say you are still waiting. Do not ask them to type that extraction
    is done. If almost no fields arrived (a code without a name, or all empty),
    say the scan was unreadable and ask-document for a clearer photo.
-4. When fields already exist on get-company, show them with show-draft on any
-   later user message — including «распознай повторно». Do not say you are
-   still waiting if a registration number or legal name is already on the card.
-   Re-reading the same file is the cabinet's job; do not ask them to upload it
-   again.
+4. On any later user message — status, «готово?», a language switch, or
+   «распознай повторно» — call get-company once (and list-documents if you
+   need item status). If list-documents already shows parsed or rejected,
+   treat extraction as finished even without [extraction-ready]. If a
+   registration number or legal name is on the card, show-draft. Never say
+   the system is still processing. If the item is still uploaded and the
+   draft is empty, say the reading did not come back: they can type the
+   Chinese name (名称) or attach a clearer photo. Do not ask them to upload
+   the same file again unless they want a new photo.
    Every field must carry the document it came from. If a value looks wrong
    to the user, fix it with patch-company-draft and keep the source.
 5. Ask only for what is missing. Never re-ask for a document already in

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { extractFailureReason } from './extract-reason.ts';
 import { imageKind, isItemType, schemaHint } from './extract-schemas.ts';
 
 describe('imageKind', () => {
@@ -14,6 +15,20 @@ describe('imageKind', () => {
     assert.deepEqual(imageKind('dossier.pdf', 'application/pdf'), { ok: false });
     assert.deepEqual(imageKind('letter.docx', ''), { ok: false });
     assert.deepEqual(imageKind('scan.tiff', ''), { ok: false });
+  });
+});
+
+describe('extractFailureReason', () => {
+  it('keeps a short reason for vision, size and abort', () => {
+    assert.equal(
+      extractFailureReason({ code: 'too_large', message: 'scan is 9 MB' }),
+      'file too large; send a photo under 4 MB',
+    );
+    assert.match(extractFailureReason({ code: 'vision_failed', message: 'model down' }), /vision_failed/);
+    assert.equal(extractFailureReason(new Error('network')), 'network');
+    const aborted = new Error('aborted');
+    aborted.name = 'AbortError';
+    assert.match(extractFailureReason(aborted), /vision_timeout/);
   });
 });
 

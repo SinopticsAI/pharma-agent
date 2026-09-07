@@ -4,11 +4,14 @@
  * contract. Bytes never enter /chat.
  */
 
-import { MODEL_ID } from './model';
+import { extractFailureReason } from './extract-reason';
 import { imageKind, schemaHint, isItemType, type ItemType } from './extract-schemas';
+import { MODEL_ID } from './model';
 import { edge, EdgeError, type CallContext } from './tools/edge';
 
 const MAX_BYTES = 4 * 1024 * 1024;
+/** Container hard-kills at 300s (499). Abort vision earlier so the webhook can close the item. */
+export const EXTRACT_VISION_MS = 90_000;
 
 export { imageKind };
 
@@ -108,6 +111,7 @@ function visionPrompt(hintedType: string): string {
     'extracted: object of English snake_case keys to string values or null. Do not invent a name or a registration number.',
     'unreadable: true when almost nothing can be read (a code without 名称, or all empty).',
     'reason: short English note when unreadable or when itemType is other.',
+    '/no_think',
   ].join('\n');
 }
 
@@ -158,7 +162,12 @@ function parseVision(raw: string): VisionResult {
   };
 }
 
-async function callQwen(mime: string, bytes: Uint8Array, hintedType: string): Promise<VisionResult> {
+async function callQwen(
+  mime: string,
+  bytes: Uint8Array,
+  hintedType: string,
+  signal?: AbortSignal,
+): Promise<VisionResult> {
   const base = process.env.AI_STUDIO_BASE_URL ?? 'https://llm.api.cloud.yandex.net/v1';
   const key = process.env.AI_STUDIO_API_KEY ?? '';
   if (!key) throw new EdgeError(503, 'not_configured', 'AI_STUDIO_API_KEY must be set');
@@ -166,6 +175,7 @@ async function callQwen(mime: string, bytes: Uint8Array, hintedType: string): Pr
   const dataUri = `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`;
   const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Api-Key ${key}`,
@@ -175,15 +185,9 @@ async function callQwen(mime: string, bytes: Uint8Array, hintedType: string): Pr
       model: MODEL_ID,
       temperature: 0,
       response_format: { type: 'json_object' },
-      // Studio / Qwen 3.6 think by default. A scan plus CoT misses the turn budget.
-      // Send both shapes: Studio extra_body and the chat-template flag vLLM-style hosts expect.
-      enable_thinking: false,
-      chat_template_kwargs: { enable_thinking: false },
+      // Studio rejects DashScope/vLLM flags (enable_thinking, extra_body,
+      // chat_template_kwargs) with vision_failed. Its own switch is this field.
       reasoning_options: { mode: 'DISABLED' },
-      extra_body: {
-        enable_thinking: false,
-        chat_template_kwargs: { enable_thinking: false },
-      },
       messages: [
         {
           role: 'user',
@@ -227,51 +231,53 @@ export async function extractDocument(input: ExtractInput): Promise<ExtractResul
   const item = items.find((row) => row.id === itemId);
   if (!item) throw new EdgeError(404, 'not_found', `item ${itemId} not found`);
 
-  const ticket = await edge<DownloadTicket>(
-    `/organizations/${organizationId}/items/${itemId}/download-url`,
-    { method: 'POST' },
-    input.caller,
-  );
-
-  let scan: { bytes: Uint8Array; contentType: string };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), EXTRACT_VISION_MS);
   try {
-    scan = await readScan(ticket.url);
-  } catch (error) {
-    if (error instanceof EdgeError && error.code === 'too_large') {
+    const ticket = await edge<DownloadTicket>(
+      `/organizations/${organizationId}/items/${itemId}/download-url`,
+      { method: 'POST' },
+      input.caller,
+    );
+
+    const scan = await readScan(ticket.url);
+    const kind = imageKind(item.fileName || ticket.fileName, scan.contentType);
+    if (!kind.ok) {
       await writeItem(organizationId, itemId, input.caller, {
         status: 'rejected',
-        parced: { status: 'rejected', reason: 'file too large; send a photo under 4 MB' },
+        parced: { status: 'rejected', reason: 'need a photo (jpeg/png/webp), not a PDF or office file' },
       });
       return { itemId, status: 'rejected', itemType: item.itemType, unreadable: true };
     }
-    throw error;
-  }
 
-  const kind = imageKind(item.fileName || ticket.fileName, scan.contentType);
-  if (!kind.ok) {
+    const vision = await callQwen(kind.mime, scan.bytes, item.itemType, controller.signal);
+    const itemType = vision.itemType;
+    const status = vision.unreadable ? 'rejected' : 'parsed';
+    await writeItem(organizationId, itemId, input.caller, {
+      status,
+      itemType,
+      parced: {
+        case_id: `intake-${organizationId}`,
+        item_id: itemId,
+        item_type: itemType,
+        extracted: vision.extracted,
+        ocr_json: vision.extracted,
+        status: vision.unreadable ? 'unreadable' : 'ok',
+        merge_meta: { source: 'pharma-agent', model: MODEL_ID },
+        reason: vision.reason,
+      },
+    });
+    return { itemId, status, itemType, unreadable: vision.unreadable };
+  } catch (error) {
+    const reason = extractFailureReason(error);
     await writeItem(organizationId, itemId, input.caller, {
       status: 'rejected',
-      parced: { status: 'rejected', reason: 'need a photo (jpeg/png/webp), not a PDF or office file' },
+      parced: { status: 'rejected', reason },
     });
     return { itemId, status: 'rejected', itemType: item.itemType, unreadable: true };
+  } finally {
+    clearTimeout(timer);
   }
-
-  const vision = await callQwen(kind.mime, scan.bytes, item.itemType);
-  const itemType = vision.itemType;
-  const status = vision.unreadable ? 'rejected' : 'parsed';
-  await writeItem(organizationId, itemId, input.caller, {
-    status,
-    itemType,
-    parced: {
-      case_id: `intake-${organizationId}`,
-      item_id: itemId,
-      item_type: itemType,
-      extracted: vision.extracted,
-      ocr_json: vision.extracted,
-      status: vision.unreadable ? 'unreadable' : 'ok',
-      merge_meta: { source: 'pharma-agent', model: MODEL_ID },
-      reason: vision.reason,
-    },
-  });
-  return { itemId, status, itemType, unreadable: vision.unreadable };
 }
+
+export { extractFailureReason };

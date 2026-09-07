@@ -27,10 +27,7 @@ const response = await fetch(`${BASE.replace(/\/$/, '')}/chat/completions`, {
   body: JSON.stringify({
     model,
     temperature: 0,
-    enable_thinking: false,
-    chat_template_kwargs: { enable_thinking: false },
     reasoning_options: { mode: 'DISABLED' },
-    extra_body: { enable_thinking: false, chat_template_kwargs: { enable_thinking: false } },
     messages: [
       {
         role: 'user',
