@@ -6,7 +6,7 @@ import { withLanguage } from '../locale';
 import { MODEL } from '../model';
 import { chatMemory } from '../store';
 
-export const PROMPT_VERSION = 'product-intake@2026-09-07.5';
+export const PROMPT_VERSION = 'product-intake@2026-09-08.1';
 
 /**
  * Product intake and the draft classification.
@@ -45,9 +45,12 @@ regulator and never choose the class on the user's behalf.
    get-product, show-draft. Do not say you are still waiting. If the newest
    item is still uploaded and the draft is empty, say the reading did not
    come back — they can type the missing line or attach a clearer photo. Say
-   unreadable only when the newest file produced no fields. After a new
-   upload this turn, say it has gone to reading and stop — do not ask for
-   typed fields on that same turn.
+   unreadable only when the newest file produced no fields, and check failure
+   in that item's parcedData first: failure=service means reading broke on our
+   side, so say the file is fine and we will read it again, and never ask for
+   another photo; failure=unreadable is the scan, so a clearer one helps.
+   After a new upload this turn, say it has gone to reading and stop — do not
+   ask for typed fields on that same turn.
 5. When something is missing, ask for exactly that one thing with ask-document.
    If a line of text closes the gap — a measuring range, a market — set
    acceptsText and accept the answer as text.

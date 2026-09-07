@@ -1,14 +1,22 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { extractFailureReason } from './extract-reason.ts';
-import { imageKind, isItemType, schemaHint } from './extract-schemas.ts';
+import { extractFailureKind, extractFailureReason } from './extract-reason.ts';
+import {
+  imageKind,
+  isItemType,
+  schemaHint,
+  visionPrompt,
+  visionRequestBody,
+} from './extract-schemas.ts';
 import {
   collectExtracted,
   hasExtractedValue,
   hasLicenseIdentity,
   normalizeVisionFields,
   recoverLicenseFields,
+  toIsoDate,
+  usccLooksWrong,
 } from './license-fields.ts';
 
 describe('imageKind', () => {
@@ -36,6 +44,62 @@ describe('extractFailureReason', () => {
     const aborted = new Error('aborted');
     aborted.name = 'AbortError';
     assert.match(extractFailureReason(aborted), /vision_timeout/);
+  });
+});
+
+describe('extractFailureKind', () => {
+  it('blames the scan only when another file would help', () => {
+    assert.equal(extractFailureKind({ code: 'too_large', message: 'scan is 9 MB' }), 'unreadable');
+  });
+
+  it('blames the service for everything on our side', () => {
+    // The 400 on reasoning_options landed here and sent the user hunting for a
+    // better photo of a licence that read perfectly well.
+    assert.equal(extractFailureKind({ code: 'vision_failed', message: 'Unsupported parameter(s)' }), 'service');
+    assert.equal(extractFailureKind({ code: 'not_configured', message: 'no key' }), 'service');
+    assert.equal(extractFailureKind({ code: 'download_failed', message: 'presigned GET 403' }), 'service');
+    const aborted = new Error('aborted');
+    aborted.name = 'AbortError';
+    assert.equal(extractFailureKind(aborted), 'service');
+    assert.equal(extractFailureKind(new Error('network')), 'service');
+  });
+});
+
+describe('visionRequestBody', () => {
+  const body = visionRequestBody({
+    model: 'gpt://folder/qwen3.6-35b-a3b',
+    mime: 'image/jpeg',
+    bytes: new Uint8Array([1, 2, 3]),
+    hintedType: 'business-license',
+  });
+
+  it('carries the only thinking switch Studio accepts', () => {
+    assert.equal(body.reasoning_effort, 'none');
+    assert.deepEqual(body.response_format, { type: 'json_object' });
+    assert.equal(body.max_tokens, 4096);
+    assert.equal(body.temperature, 0);
+  });
+
+  it('omits every parameter Studio answers 400 to', () => {
+    for (const key of ['reasoning_options', 'enable_thinking', 'extra_body', 'chat_template_kwargs']) {
+      assert.equal(key in body, false, `${key} must not reach Studio`);
+    }
+  });
+
+  it('sends the prompt and the scan as one user message', () => {
+    const messages = body.messages as { role: string; content: { type: string; text?: string }[] }[];
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].role, 'user');
+    assert.deepEqual(
+      messages[0].content.map((part) => part.type),
+      ['text', 'image_url'],
+    );
+    assert.match(JSON.stringify(messages[0].content[1]), /^{"type":"image_url","image_url":{"url":"data:image\/jpeg;base64,/);
+  });
+
+  it('drops /no_think: the model ignores it and it only muddies the prompt', () => {
+    assert.equal(visionPrompt('business-license').includes('/no_think'), false);
+    assert.match(visionPrompt('business-license'), /company_name/);
   });
 });
 
@@ -81,6 +145,40 @@ describe('recoverLicenseFields', () => {
   });
 });
 
+describe('usccLooksWrong', () => {
+  it('tells apart the two readings of one licence', () => {
+    // Both came off the same 营业执照; only the arithmetic knows which is real.
+    assert.equal(usccLooksWrong('91330106MAK20KYJ17'), false);
+    assert.equal(usccLooksWrong('91330106MA2KXYYJ17'), true);
+  });
+
+  it('flags letters the standard leaves out', () => {
+    assert.equal(usccLooksWrong('91330106MAI20KYJ17'), true);
+    assert.equal(usccLooksWrong('91330106MAO20KYJ17'), true);
+  });
+
+  it('leaves an old 15-digit 注册号 alone', () => {
+    assert.equal(usccLooksWrong('330106000012345'), false);
+    assert.equal(usccLooksWrong(''), false);
+  });
+});
+
+describe('toIsoDate', () => {
+  it('reads the Chinese form and the punctuation variants', () => {
+    assert.equal(toIsoDate('2025年11月19日'), '2025-11-19');
+    assert.equal(toIsoDate('2025年1月9日'), '2025-01-09');
+    assert.equal(toIsoDate('2025.11.19'), '2025-11-19');
+    assert.equal(toIsoDate('2025/11/19'), '2025-11-19');
+    assert.equal(toIsoDate('2025-11-19'), '2025-11-19');
+  });
+
+  it('keeps quiet when there is no date to be sure of', () => {
+    assert.equal(toIsoDate('长期'), '');
+    assert.equal(toIsoDate('2025年2月30日'), '');
+    assert.equal(toIsoDate(''), '');
+  });
+});
+
 describe('normalizeVisionFields', () => {
   it('keeps root-level Chinese keys when extracted is missing', () => {
     const vision = normalizeVisionFields({
@@ -112,6 +210,42 @@ describe('normalizeVisionFields', () => {
     });
     assert.equal(vision.unreadable, true);
     assert.equal(hasExtractedValue(vision.extracted), false);
+  });
+
+  it('sends the registration date on as ISO and the capital as printed', () => {
+    const vision = normalizeVisionFields({
+      itemType: 'business-license',
+      extracted: {
+        company_name: '杭州信纳智析科技有限公司',
+        establishment_date: '2025年11月19日',
+        registered_capital: '壹拾伍万人民币元',
+      },
+    });
+    assert.equal(vision.extracted.establishment_date, '2025-11-19');
+    assert.equal(vision.extracted.registered_capital, '壹拾伍万人民币元');
+  });
+
+  it('marks a code that contradicts its check digit', () => {
+    const vision = normalizeVisionFields({
+      itemType: 'business-license',
+      extracted: { unified_social_credit_code: '91330106MA2KXYYJ17' },
+    });
+    assert.equal(vision.extracted.uscc_checksum, 'invalid');
+    // The value survives: a human still has to compare it with the paper.
+    assert.equal(vision.extracted.unified_social_credit_code, '91330106MA2KXYYJ17');
+  });
+
+  it('says nothing when the code adds up', () => {
+    const vision = normalizeVisionFields({
+      itemType: 'business-license',
+      extracted: { unified_social_credit_code: '91330106MAK20KYJ17' },
+    });
+    assert.equal('uscc_checksum' in vision.extracted, false);
+  });
+
+  it('does not let the flag pass for a read field', () => {
+    const vision = normalizeVisionFields({ itemType: 'other', extracted: { company_name: null } });
+    assert.equal(vision.unreadable, true);
   });
 
   it('lets nested extracted win over a root-level empty name', () => {

@@ -189,7 +189,7 @@ export const requestUpload = createTool({
 export const listDocuments = createTool({
   id: 'list-documents',
   description:
-    'Documents of a company and its products, with extraction results. Use it before asking for a file: a company document is never uploaded twice. When several files share an itemType, only the newest updatedAt matters — ignore older rejected office files.',
+    'Documents of a company and its products, with extraction results. Use it before asking for a file: a company document is never uploaded twice. When several files share an itemType, only the newest updatedAt matters — ignore older rejected office files. parcedData.failure says who has to act on a rejection: service is our fault, unreadable is the scan. parcedData.extracted.uscc_checksum=invalid means the registration number was misread.',
   inputSchema: z.object({ organizationId: z.string().optional() }),
   execute: async ({ organizationId }, context) =>
     edge(`/organizations/${resolveOrganizationId(organizationId, context)}/items`, {}, callerOf(context)),

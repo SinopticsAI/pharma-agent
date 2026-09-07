@@ -1,6 +1,10 @@
 /**
- * Field hints for intake OCR. Same English snake_case keys Plane uses so
- * Edge merge_org_draft / merge_product_draft keep working.
+ * What we ask the vision model for, and the body we ask it in. Same English
+ * snake_case keys Plane uses so Edge merge_org_draft / merge_product_draft keep
+ * working.
+ *
+ * This module imports nothing on purpose: the test loads it directly, and the
+ * request body is worth reading without a network call.
  */
 
 export const ITEM_TYPES = [
@@ -73,4 +77,54 @@ export function schemaHint(itemType: string): string {
   const key = itemType.trim().toLowerCase();
   if (isItemType(key)) return SCHEMA_HINTS[key];
   return SCHEMA_HINTS.other;
+}
+
+/** A read licence is around 600 characters; the rest is headroom. */
+const MAX_TOKENS = 4096;
+
+export function visionPrompt(hintedType: string): string {
+  return [
+    'You read one scan of a Chinese manufacturer document for MedMost intake.',
+    'Return a single JSON object, no markdown.',
+    'Keys: itemType, extracted, unreadable, reason.',
+    `itemType must be one of: ${ITEM_TYPES.join(', ')}.`,
+    `The uploader labelled this file as "${hintedType}". If it is a 营业执照, itemType is business-license even when the label is other.`,
+    schemaHint(hintedType),
+    'extracted: object of English snake_case keys to string values or null. Do not invent a name or a registration number.',
+    'unreadable: true only when nothing usable can be read. A unified social credit code without 名称 is incomplete, not unreadable.',
+    'reason: short English note when unreadable or when itemType is other.',
+  ].join('\n');
+}
+
+/**
+ * Thinking must be off. Studio's OpenAI-compatible contour answers 400
+ * «Unsupported parameter(s)» to every DashScope/vLLM switch — reasoning_options,
+ * enable_thinking, chat_template_kwargs, extra_body — and ignores /no_think in
+ * the prompt. Left on, qwen3.6 spends the whole budget on reasoning_content and
+ * returns an empty content, which reaches us as «model did not return JSON».
+ * reasoning_effort is the only switch this endpoint honours.
+ */
+export function visionRequestBody(input: {
+  model: string;
+  mime: string;
+  bytes: Uint8Array;
+  hintedType: string;
+}): Record<string, unknown> {
+  const dataUri = `data:${input.mime};base64,${Buffer.from(input.bytes).toString('base64')}`;
+  return {
+    model: input.model,
+    temperature: 0,
+    max_tokens: MAX_TOKENS,
+    reasoning_effort: 'none',
+    response_format: { type: 'json_object' },
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: visionPrompt(input.hintedType) },
+          { type: 'image_url', image_url: { url: dataUri } },
+        ],
+      },
+    ],
+  };
 }

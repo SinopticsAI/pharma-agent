@@ -4,8 +4,8 @@
  * contract. Bytes never enter /chat.
  */
 
-import { extractFailureReason } from './extract-reason';
-import { imageKind, schemaHint, isItemType, type ItemType } from './extract-schemas';
+import { extractFailureKind, extractFailureReason, type ExtractFailure } from './extract-reason';
+import { imageKind, isItemType, visionRequestBody, type ItemType } from './extract-schemas';
 import { normalizeVisionFields } from './license-fields';
 import { MODEL_ID } from './model';
 import { edge, EdgeError, type CallContext } from './tools/edge';
@@ -101,21 +101,6 @@ async function readScan(url: string): Promise<{ bytes: Uint8Array; contentType: 
   };
 }
 
-function visionPrompt(hintedType: string): string {
-  return [
-    'You read one scan of a Chinese manufacturer document for MedMost intake.',
-    'Return a single JSON object, no markdown.',
-    'Keys: itemType, extracted, unreadable, reason.',
-    'itemType must be one of: business-license, company-registry, iso-13485, poa-upp, site-docs, gmp-cn, trademark, nmpa-certificate, instruction-cn, instruction-ru, tech-spec, lab-protocol, regulator-letter, other.',
-    `The uploader labelled this file as "${hintedType}". If it is a 营业执照, itemType is business-license even when the label is other.`,
-    schemaHint(hintedType),
-    'extracted: object of English snake_case keys to string values or null. Do not invent a name or a registration number.',
-    'unreadable: true only when nothing usable can be read. A unified social credit code without 名称 is incomplete, not unreadable.',
-    'reason: short English note when unreadable or when itemType is other.',
-    '/no_think',
-  ].join('\n');
-}
-
 function firstJsonObject(raw: string): string {
   const trimmed = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   const start = trimmed.indexOf('{');
@@ -163,7 +148,6 @@ async function callQwen(
   const key = process.env.AI_STUDIO_API_KEY ?? '';
   if (!key) throw new EdgeError(503, 'not_configured', 'AI_STUDIO_API_KEY must be set');
 
-  const dataUri = `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`;
   const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     signal,
@@ -172,23 +156,7 @@ async function callQwen(
       Authorization: `Api-Key ${key}`,
       ...(process.env.FOLDER_ID ? { 'x-folder-id': process.env.FOLDER_ID } : {}),
     },
-    body: JSON.stringify({
-      model: MODEL_ID,
-      temperature: 0,
-      response_format: { type: 'json_object' },
-      // Studio rejects DashScope/vLLM flags (enable_thinking, extra_body,
-      // chat_template_kwargs) with vision_failed. Its own switch is this field.
-      reasoning_options: { mode: 'DISABLED' },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: visionPrompt(hintedType) },
-            { type: 'image_url', image_url: { url: dataUri } },
-          ],
-        },
-      ],
-    }),
+    body: JSON.stringify(visionRequestBody({ model: MODEL_ID, mime, bytes, hintedType })),
   });
   const text = await response.text();
   if (!response.ok) {
@@ -244,12 +212,13 @@ export async function extractDocument(input: ExtractInput): Promise<ExtractResul
           unreadable: true,
           keys: [],
           reason,
+          failure: 'unreadable',
           status: 'rejected',
         }),
       );
       await writeItem(organizationId, itemId, input.caller, {
         status: 'rejected',
-        parced: { status: 'rejected', reason },
+        parced: { status: 'rejected', reason, failure: 'unreadable' },
       });
       return { itemId, status: 'rejected', itemType: item.itemType, unreadable: true };
     }
@@ -268,6 +237,8 @@ export async function extractDocument(input: ExtractInput): Promise<ExtractResul
         unreadable: vision.unreadable,
         keys: Object.keys(vision.extracted),
         reason: vision.reason,
+        // The model answered, so a rejection here really is about the scan.
+        ...(vision.unreadable ? { failure: 'unreadable' as const } : {}),
         status,
       }),
     );
@@ -283,11 +254,13 @@ export async function extractDocument(input: ExtractInput): Promise<ExtractResul
         status: vision.unreadable ? 'unreadable' : 'ok',
         merge_meta: { source: 'pharma-agent', model: MODEL_ID },
         reason: vision.reason,
+        ...(vision.unreadable ? { failure: 'unreadable' as const } : {}),
       },
     });
     return { itemId, status, itemType, unreadable: vision.unreadable };
   } catch (error) {
     const reason = extractFailureReason(error);
+    const failure: ExtractFailure = extractFailureKind(error);
     console.log(
       '[EXTRACT]',
       JSON.stringify({
@@ -296,12 +269,13 @@ export async function extractDocument(input: ExtractInput): Promise<ExtractResul
         unreadable: true,
         keys: [],
         reason,
+        failure,
         status: 'rejected',
       }),
     );
     await writeItem(organizationId, itemId, input.caller, {
       status: 'rejected',
-      parced: { status: 'rejected', reason },
+      parced: { status: 'rejected', reason, failure },
     });
     return { itemId, status: 'rejected', itemType: item.itemType, unreadable: true };
   } finally {
@@ -309,4 +283,4 @@ export async function extractDocument(input: ExtractInput): Promise<ExtractResul
   }
 }
 
-export { extractFailureReason };
+export { extractFailureKind, extractFailureReason };
