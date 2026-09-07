@@ -7,7 +7,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 
 const BASE_URL = process.env.AI_STUDIO_BASE_URL ?? 'https://llm.api.cloud.yandex.net/v1';
 const FOLDER_ID = process.env.FOLDER_ID ?? '';
-const MODEL_NAME = process.env.AGENT_MODEL ?? 'yandexgpt/latest';
+const MODEL_NAME = process.env.AGENT_MODEL ?? 'qwen3.6-35b-a3b';
 
 const provider = createOpenAICompatible({
   name: 'yandex-ai-studio',

@@ -23,14 +23,14 @@ export class EdgeError extends Error {
   }
 }
 
-interface CallContext {
+export interface CallContext {
   accountId?: string;
   subject?: string;
   actor?: string;
   authorization?: string;
 }
 
-async function edge<T>(
+export async function edge<T>(
   path: string,
   init: { method?: string; body?: unknown } = {},
   ctx: CallContext = {},

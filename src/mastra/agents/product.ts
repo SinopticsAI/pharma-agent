@@ -5,7 +5,7 @@ import { edgeTools } from '../tools/edge';
 import { withLanguage } from '../locale';
 import { MODEL } from '../model';
 
-export const PROMPT_VERSION = 'product-intake@2026-09-07.2';
+export const PROMPT_VERSION = 'product-intake@2026-09-07.3';
 
 /**
  * Product intake and the draft classification.
@@ -35,9 +35,11 @@ regulator and never choose the class on the user's behalf.
 3. Extract facts and write them with patch-product-draft, each with the source
    it came from, for example "IFU § 1.2".
 4. When a message starts with [extraction-ready], call get-product and
-   show-draft. That notice comes from the cabinet after Plane finishes, not
-   from the user. Do not wait or ask them to confirm extraction. If almost no
-   fields arrived, say the scan was unreadable and ask-document.
+   show-draft. That notice comes from the cabinet after Mastra reads the scan,
+   not from the user. Do not wait or ask them to confirm extraction. If fields
+   are already on get-product, show-draft even when the user asks to re-read
+   the file. If almost no fields arrived, say the scan was unreadable and
+   ask-document.
 5. When something is missing, ask for exactly that one thing with ask-document.
    If a line of text closes the gap — a measuring range, a market — set
    acceptsText and accept the answer as text.

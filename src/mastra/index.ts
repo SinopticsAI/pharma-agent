@@ -22,7 +22,9 @@ import { PostgresStore } from '@mastra/pg';
 import { companyIntake } from './agents/company';
 import { productIntake } from './agents/product';
 import { callerFrom } from './auth/claims';
+import { extractDocument } from './extract';
 import { localeOf, type Locale } from './locale';
+import { EdgeError } from './tools/edge';
 
 type ChatHints = { locale: Locale; organizationId: string; productId: string };
 
@@ -49,7 +51,8 @@ async function chatHintsFromRequest(c: {
       if (locale === undefined && (data.locale ?? rc.locale) !== undefined) {
         locale = localeOf(data.locale ?? rc.locale);
       }
-      organizationId = asId(data.organizationId) || asId(rc.organizationId);
+      organizationId =
+        asId(data.organizationId) || asId(rc.organizationId) || asId((body as { organizationId?: unknown }).organizationId);
       productId = asId(data.productId) || asId(rc.productId);
     } catch {
       // Chat route still needs the original body; a non-JSON POST is not ours.
@@ -104,6 +107,39 @@ export const mastra = new Mastra({
       registerApiRoute('/health', {
         method: 'GET',
         handler: async (c) => c.json({ ok: true, service: 'pharma-agent' }),
+      }),
+      registerApiRoute('/extract', {
+        method: 'POST',
+        handler: async (c) => {
+          const runtime = c.get('requestContext');
+          let body: { organizationId?: unknown; itemId?: unknown } = {};
+          try {
+            body = (await c.req.json()) as { organizationId?: unknown; itemId?: unknown };
+          } catch {
+            return c.json({ error: 'invalid_json', message: 'JSON body required' }, 400);
+          }
+          const organizationId = asId(body.organizationId) || asId(runtime?.get('organizationId'));
+          const itemId = asId(body.itemId);
+          try {
+            const data = await extractDocument({
+              organizationId,
+              itemId,
+              caller: {
+                accountId: asId(runtime?.get('accountId')),
+                subject: asId(runtime?.get('subject')),
+                actor: asId(runtime?.get('displayName')),
+                authorization: asId(runtime?.get('authorization')) || c.req.header('Authorization') || '',
+              },
+            });
+            return c.json({ data });
+          } catch (error) {
+            if (error instanceof EdgeError) {
+              return c.json({ error: error.code, message: error.message }, error.status as 400);
+            }
+            const message = error instanceof Error ? error.message : 'extract failed';
+            return c.json({ error: 'extract_failed', message }, 500);
+          }
+        },
       }),
     ],
     middleware: [

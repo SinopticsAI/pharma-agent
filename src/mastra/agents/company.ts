@@ -5,7 +5,7 @@ import { edgeTools } from '../tools/edge';
 import { withLanguage } from '../locale';
 import { MODEL } from '../model';
 
-export const PROMPT_VERSION = 'company-intake@2026-09-07.3';
+export const PROMPT_VERSION = 'company-intake@2026-09-07.4';
 
 /**
  * Company onboarding by conversation, roughly fifteen minutes instead of weeks
@@ -28,17 +28,21 @@ state change, and the Russian side confirms regulatory choices later.
    regulatory questionnaire.
 2. After an upload, call get-company once. The company id is already in the
    dialog context — omit organizationId or pass that id, never type org-...
-   and never pass a document itemId (it-...). Extraction runs in Plane; this
-   turn cannot wait for it. Say the document has gone to reading and stop. Do
-   not call get-company again in the same turn. Do not ask them to upload the
-   same scan again. A paperclip upload that arrives as itemType other is still
-   the licence.
+   and never pass a document itemId (it-...). Extraction runs in Mastra on the
+   scan in the bucket; this turn cannot wait for it. Say the document has gone
+   to reading and stop. Do not call get-company again in the same turn. Do not
+   ask them to upload the same scan again. A paperclip upload that arrives as
+   itemType other is still the licence.
 3. When the next message starts with [extraction-ready], the cabinet — not the
-   user — is telling you Plane finished. Call get-company once and show-draft.
+   user — is telling you the scan was read. Call get-company once and show-draft.
    Do not say you are still waiting. Do not ask them to type that extraction
    is done. If almost no fields arrived (a code without a name, or all empty),
    say the scan was unreadable and ask-document for a clearer photo.
-4. When fields arrive on any later user message, show them with show-draft.
+4. When fields already exist on get-company, show them with show-draft on any
+   later user message — including «распознай повторно». Do not say you are
+   still waiting if a registration number or legal name is already on the card.
+   Re-reading the same file is the cabinet's job; do not ask them to upload it
+   again.
    Every field must carry the document it came from. If a value looks wrong
    to the user, fix it with patch-company-draft and keep the source.
 5. Ask only for what is missing. Never re-ask for a document already in

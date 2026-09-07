@@ -23,7 +23,7 @@ LOCKBOX_APP_SECRET_ID="${LOCKBOX_APP_SECRET_ID//[[:space:]]/}"
 VPC_NETWORK_ID="${VPC_NETWORK_ID:?}"
 PG_HOST="${PG_HOST:?}"
 EDGE_API_BASE="${EDGE_API_BASE:-https://pharma-edge.sinoptics.ru}"
-AGENT_MODEL="${AGENT_MODEL:-yandexgpt/latest}"
+AGENT_MODEL="${AGENT_MODEL:-qwen3.6-35b-a3b}"
 SA_GATEWAY_ID="${SA_GATEWAY_ID:-}"
 
 NAME="pharma-agent"

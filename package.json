@@ -11,7 +11,8 @@
     "dev": "mastra dev",
     "build": "mastra build",
     "start": "node .mastra/output/index.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test src/mastra/extract.test.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^1.0.0",
