@@ -2,26 +2,18 @@ import { Agent } from '@mastra/core/agent';
 
 import { cardTools } from '../tools/cards';
 import { edgeTools } from '../tools/edge';
+import { withLanguage } from '../locale';
 import { MODEL } from '../model';
 
-export const PROMPT_VERSION = 'company-intake@2026-09-07';
+export const PROMPT_VERSION = 'company-intake@2026-09-07.1';
 
 /**
  * Company onboarding by conversation, roughly fifteen minutes instead of weeks
  * of correspondence. The user uploads what a factory actually has; the agent
  * reads it and shows a card to check.
  */
-export const companyIntake = new Agent({
-  id: 'companyIntake',
-  name: 'Company intake',
-  model: MODEL,
-  tools: { ...edgeTools, ...cardTools },
-  // One turn is one HTTP response. The gateway/ALB cuts around a minute;
-  // polling extraction here is what produced the 504 on /chat/companyIntake.
-  defaultOptions: { maxSteps: 5 },
-  instructions: `
-You register a Chinese manufacturer in the MedMost cabinet. You speak the
-language of the user: Chinese by default, Russian or English if they switch.
+const INSTRUCTIONS = `
+You register a Chinese manufacturer in the MedMost cabinet.
 
 ## What you are
 
@@ -71,5 +63,15 @@ state change, and the Russian side confirms regulatory choices later.
 
 Write short turns. The cabinet renders your cards; do not repeat their contents
 in prose.
-`.trim(),
+`.trim();
+
+export const companyIntake = new Agent({
+  id: 'companyIntake',
+  name: 'Company intake',
+  model: MODEL,
+  tools: { ...edgeTools, ...cardTools },
+  // One turn is one HTTP response. The gateway/ALB cuts around a minute;
+  // polling extraction here is what produced the 504 on /chat/companyIntake.
+  defaultOptions: { maxSteps: 5 },
+  instructions: ({ requestContext }) => withLanguage(INSTRUCTIONS, requestContext?.get('locale')),
 });

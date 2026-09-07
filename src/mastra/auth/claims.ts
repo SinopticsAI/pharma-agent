@@ -142,7 +142,10 @@ export function devCaller(): Caller | null {
 
 export function callerFrom(event: GatewayEvent, locale = 'zh'): Caller | null {
   const subject = subjectOf(event);
-  if (!subject) return devCaller();
+  if (!subject) {
+    const fallback = devCaller();
+    return fallback ? { ...fallback, locale } : null;
+  }
   return {
     subject,
     accountId: '', // filled by the Edge lookup in runtime context

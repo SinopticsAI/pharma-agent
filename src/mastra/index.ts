@@ -22,6 +22,25 @@ import { PostgresStore } from '@mastra/pg';
 import { companyIntake } from './agents/company';
 import { productIntake } from './agents/product';
 import { callerFrom } from './auth/claims';
+import { localeOf, type Locale } from './locale';
+
+async function localeFromRequest(c: { req: { method: string; header: (name: string) => string | undefined; raw: Request } }): Promise<Locale> {
+  const header = c.req.header('X-Pharma-Locale');
+  if (header === 'zh' || header === 'en' || header === 'ru') return header;
+  if (c.req.method === 'POST') {
+    try {
+      const body = (await c.req.raw.clone().json()) as {
+        data?: { locale?: unknown };
+        requestContext?: { locale?: unknown };
+      };
+      const fromBody = body.data?.locale ?? body.requestContext?.locale;
+      if (fromBody !== undefined) return localeOf(fromBody);
+    } catch {
+      // Chat route still needs the original body; a non-JSON POST is not ours.
+    }
+  }
+  return 'zh';
+}
 
 function connectionString(): string {
   const direct = process.env.PG_DSN;
@@ -77,12 +96,13 @@ export const mastra = new Mastra({
       // trusts a value from the body.
       async (c, next) => {
         const runtime = c.get('requestContext');
+        const locale = await localeFromRequest(c);
         const caller = callerFrom(
           {
             requestContext: (c.req.raw as unknown as { requestContext?: never }).requestContext,
             headers: Object.fromEntries(c.req.raw.headers.entries()),
           },
-          c.req.header('X-Pharma-Locale') ?? 'zh',
+          locale,
         );
         const authorization = c.req.header('Authorization');
         if (authorization) runtime?.set('authorization', authorization);
@@ -96,6 +116,8 @@ export const mastra = new Mastra({
           runtime?.set('role', caller.role);
           runtime?.set('displayName', caller.displayName);
           runtime?.set('locale', caller.locale);
+        } else {
+          runtime?.set('locale', locale);
         }
         await next();
       },

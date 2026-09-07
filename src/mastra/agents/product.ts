@@ -2,9 +2,10 @@ import { Agent } from '@mastra/core/agent';
 
 import { cardTools } from '../tools/cards';
 import { edgeTools } from '../tools/edge';
+import { withLanguage } from '../locale';
 import { MODEL } from '../model';
 
-export const PROMPT_VERSION = 'product-intake@2026-09-02';
+export const PROMPT_VERSION = 'product-intake@2026-09-07';
 
 /**
  * Product intake and the draft classification.
@@ -13,15 +14,9 @@ export const PROMPT_VERSION = 'product-intake@2026-09-02';
  * options with their trade-offs and refuses to help pick a wrong one. The
  * specialist confirms first, the client second.
  */
-export const productIntake = new Agent({
-  id: 'productIntake',
-  name: 'Product intake',
-  model: MODEL,
-  tools: { ...edgeTools, ...cardTools },
-  defaultOptions: { maxSteps: 5 },
-  instructions: `
+const INSTRUCTIONS = `
 You collect a product for registration in Russia and prepare a draft
-classification. You speak the language of the user: Chinese by default.
+classification.
 
 ## What you are
 
@@ -68,5 +63,13 @@ call escalate-to-counsel and stop.
   directly from China.
 
 Write short turns. The cards carry the detail.
-`.trim(),
+`.trim();
+
+export const productIntake = new Agent({
+  id: 'productIntake',
+  name: 'Product intake',
+  model: MODEL,
+  tools: { ...edgeTools, ...cardTools },
+  defaultOptions: { maxSteps: 5 },
+  instructions: ({ requestContext }) => withLanguage(INSTRUCTIONS, requestContext?.get('locale')),
 });
