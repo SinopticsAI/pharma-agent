@@ -4,6 +4,7 @@ import { cardTools } from '../tools/cards';
 import { edgeTools } from '../tools/edge';
 import { withLanguage } from '../locale';
 import { MODEL } from '../model';
+import { chatMemory } from '../store';
 
 export const PROMPT_VERSION = 'product-intake@2026-09-07.4';
 
@@ -81,6 +82,7 @@ export const productIntake = new Agent({
   name: 'Product intake',
   model: MODEL,
   tools: { ...edgeTools, ...cardTools },
+  memory: chatMemory,
   defaultOptions: { maxSteps: 5 },
   instructions: ({ requestContext }) => {
     const org = requestContext?.get('organizationId');

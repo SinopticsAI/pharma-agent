@@ -4,6 +4,7 @@ import { cardTools } from '../tools/cards';
 import { edgeTools } from '../tools/edge';
 import { withLanguage } from '../locale';
 import { MODEL } from '../model';
+import { chatMemory } from '../store';
 
 export const PROMPT_VERSION = 'company-intake@2026-09-07.5';
 
@@ -86,6 +87,7 @@ export const companyIntake = new Agent({
   name: 'Company intake',
   model: MODEL,
   tools: { ...edgeTools, ...cardTools },
+  memory: chatMemory,
   // One turn is one HTTP response. The gateway/ALB cuts around a minute;
   // polling extraction here is what produced the 504 on /chat/companyIntake.
   defaultOptions: { maxSteps: 5 },

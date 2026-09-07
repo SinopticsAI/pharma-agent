@@ -16,14 +16,13 @@
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
 import { chatRoute } from '@mastra/ai-sdk';
-import { Memory } from '@mastra/memory';
-import { PostgresStore } from '@mastra/pg';
 
 import { companyIntake } from './agents/company';
 import { productIntake } from './agents/product';
 import { callerFrom } from './auth/claims';
 import { extractDocument } from './extract';
 import { localeOf, type Locale } from './locale';
+import { chatMemory, storage } from './store';
 import { EdgeError } from './tools/edge';
 
 type ChatHints = { locale: Locale; organizationId: string; productId: string };
@@ -61,36 +60,11 @@ async function chatHintsFromRequest(c: {
   return { locale: locale ?? 'zh', organizationId, productId };
 }
 
-function connectionString(): string {
-  const direct = process.env.PG_DSN;
-  if (direct) return direct;
-  const host = process.env.PG_HOST ?? '';
-  // 6432 is the Odyssey pooler in transaction mode. Not 5432: a serverless
-  // caller must not hold a session-pooled connection.
-  const port = process.env.PG_PORT ?? '6432';
-  const database = process.env.PG_DATABASE ?? 'pharma_agent';
-  const user = process.env.PG_USER ?? 'pharma_agent';
-  const password = process.env.PG_PASSWORD ?? '';
-  const sslmode = process.env.PG_SSLMODE ?? 'verify-full';
-  // Node's tls bundle does not include the Yandex MDB CA. Edge passes
-  // sslrootcert the same way; without it verify-full dies as SELF_SIGNED_CERT_IN_CHAIN.
-  const rootcert =
-    process.env.PGSSLROOTCERT || process.env.PG_SSLROOTCERT || '';
-  let dsn = `postgresql://${user}:${encodeURIComponent(password)}@${host}:${port}/${database}?sslmode=${sslmode}`;
-  if (rootcert) dsn += `&sslrootcert=${rootcert}`;
-  return dsn;
-}
-
-const storage = new PostgresStore({
-  id: 'pharma-agent-storage',
-  connectionString: connectionString(),
-});
-
 export const mastra = new Mastra({
   agents: { companyIntake, productIntake },
   storage,
   memory: {
-    chatMemory: new Memory({ options: { lastMessages: 30 } }),
+    chatMemory,
   },
   server: {
     // Same origin as the rest of the cabinet: the browser only ever talks to
