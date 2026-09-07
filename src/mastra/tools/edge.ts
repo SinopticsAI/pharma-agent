@@ -70,6 +70,18 @@ async function edge<T>(
   return parsed.data as T;
 }
 
+function organizationIdOf(organizationId: string): string {
+  const id = organizationId.trim();
+  if (id.startsWith('it-')) {
+    throw new EdgeError(
+      400,
+      'wrong_id',
+      `${id} is a document itemId. Use the company id (org-...), from the upload text or list-companies.`,
+    );
+  }
+  return id;
+}
+
 /** Pulls the caller out of the request context Mastra passes to every tool. */
 function callerOf(context: unknown): CallContext {
   const bag = context as {
@@ -96,7 +108,7 @@ export const getCompany = createTool({
     'Read a company: draft fields with their sources, approved profile, checklist slots and completeness by section.',
   inputSchema: z.object({ organizationId: z.string() }),
   execute: async ({ organizationId }, context) =>
-    edge(`/organizations/${organizationId}`, {}, callerOf(context)),
+    edge(`/organizations/${organizationIdOf(organizationId)}`, {}, callerOf(context)),
 });
 
 export const listCompanies = createTool({
@@ -127,7 +139,7 @@ export const requestUpload = createTool({
   }),
   execute: async (input, context) =>
     edge(
-      `/organizations/${input.organizationId}/items/upload-url`,
+      `/organizations/${organizationIdOf(input.organizationId)}/items/upload-url`,
       { method: 'POST', body: input },
       callerOf(context),
     ),
@@ -139,7 +151,7 @@ export const listDocuments = createTool({
     'Documents of a company and its products, with extraction results. Use it before asking for a file: a company document is never uploaded twice.',
   inputSchema: z.object({ organizationId: z.string() }),
   execute: async ({ organizationId }, context) =>
-    edge(`/organizations/${organizationId}/items`, {}, callerOf(context)),
+    edge(`/organizations/${organizationIdOf(organizationId)}/items`, {}, callerOf(context)),
 });
 
 export const promoteToCompanyProfile = createTool({
@@ -149,7 +161,7 @@ export const promoteToCompanyProfile = createTool({
   inputSchema: z.object({ organizationId: z.string(), itemId: z.string() }),
   execute: async ({ organizationId, itemId }, context) =>
     edge(
-      `/organizations/${organizationId}/items/${itemId}/promote`,
+      `/organizations/${organizationIdOf(organizationId)}/items/${itemId}/promote`,
       { method: 'POST' },
       callerOf(context),
     ),
@@ -170,7 +182,7 @@ export const patchCompanyDraft = createTool({
     ),
   }),
   execute: async ({ organizationId, draft }, context) =>
-    edge(`/organizations/${organizationId}`, { method: 'PATCH', body: { draft } }, callerOf(context)),
+    edge(`/organizations/${organizationIdOf(organizationId)}`, { method: 'PATCH', body: { draft } }, callerOf(context)),
 });
 
 export const approveCompanyProfile = createTool({
@@ -180,7 +192,7 @@ export const approveCompanyProfile = createTool({
   inputSchema: z.object({ organizationId: z.string() }),
   execute: async ({ organizationId }, context) =>
     edge(
-      `/organizations/${organizationId}`,
+      `/organizations/${organizationIdOf(organizationId)}`,
       { method: 'PATCH', body: { status: 'profile_approved' } },
       callerOf(context),
     ),
@@ -192,7 +204,7 @@ export const getRiskReport = createTool({
     'Risk level and the neutral reasoning for a company. Raw Chinese sources are never returned and must not be requested.',
   inputSchema: z.object({ organizationId: z.string() }),
   execute: async ({ organizationId }, context) =>
-    edge(`/organizations/${organizationId}/risk`, {}, callerOf(context)),
+    edge(`/organizations/${organizationIdOf(organizationId)}/risk`, {}, callerOf(context)),
 });
 
 // ------------------------------------------------------------------ product --
@@ -206,7 +218,7 @@ export const createProduct = createTool({
     kind: z.enum(['device', 'drug']).optional(),
   }),
   execute: async ({ organizationId, ...body }, context) =>
-    edge(`/organizations/${organizationId}/products`, { method: 'POST', body }, callerOf(context)),
+    edge(`/organizations/${organizationIdOf(organizationId)}/products`, { method: 'POST', body }, callerOf(context)),
 });
 
 export const getProduct = createTool({

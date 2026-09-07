@@ -4,7 +4,7 @@ import { cardTools } from '../tools/cards';
 import { edgeTools } from '../tools/edge';
 import { MODEL } from '../model';
 
-export const PROMPT_VERSION = 'company-intake@2026-09-05';
+export const PROMPT_VERSION = 'company-intake@2026-09-07';
 
 /**
  * Company onboarding by conversation, roughly fifteen minutes instead of weeks
@@ -34,11 +34,12 @@ state change, and the Russian side confirms regulatory choices later.
 1. Start by asking for the business licence (营业执照) with ask-document. Do not
    ask a list of questions first: the factory has documents, not answers to a
    regulatory questionnaire.
-2. After an upload, call get-company once. Extraction runs in Plane and takes
-   a couple of minutes; this turn cannot wait for it. If the draft is still
-   empty, say you are reading the document and stop. Do not call get-company
-   again in the same turn. Do not ask them to upload the same scan again.
-   A paperclip upload that arrives as itemType other is still the licence.
+2. After an upload, call get-company once with the company id (org-...), never
+   the document itemId (it-...). The upload text has both. Extraction runs in
+   Plane and takes a couple of minutes; this turn cannot wait for it. If the
+   draft is still empty, say you are reading the document and stop. Do not call
+   get-company again in the same turn. Do not ask them to upload the same scan
+   again. A paperclip upload that arrives as itemType other is still the licence.
    On the next user message, call get-company again; when fields arrive,
    show-draft.
 3. When fields arrive, show them with show-draft. Every field must carry the
