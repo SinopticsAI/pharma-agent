@@ -4,17 +4,29 @@
  * contract. Bytes never enter /chat.
  */
 
-import { extractFailureKind, extractFailureReason, type ExtractFailure } from './extract-reason';
-import { imageKind, isItemType, visionRequestBody, type ItemType } from './extract-schemas';
+import {
+  extractFailureKind,
+  extractFailureReason,
+  isDegenerateAnswer,
+  type ExtractFailure,
+} from './extract-reason';
+import {
+  isItemType,
+  scanKind,
+  visionRequestBody,
+  type ItemType,
+  type VisionPayload,
+} from './extract-schemas';
 import { normalizeVisionFields } from './license-fields';
 import { MODEL_ID } from './model';
+import { preparePdf } from './pdf';
 import { edge, EdgeError, type CallContext } from './tools/edge';
 
 const MAX_BYTES = 4 * 1024 * 1024;
 /** Container hard-kills at 300s (499). Abort vision earlier so the webhook can close the item. */
 export const EXTRACT_VISION_MS = 90_000;
 
-export { imageKind };
+export { scanKind };
 
 export interface ExtractInput {
   organizationId: string;
@@ -139,8 +151,7 @@ function parseVision(raw: string): VisionResult {
 }
 
 async function callQwen(
-  mime: string,
-  bytes: Uint8Array,
+  payload: VisionPayload,
   hintedType: string,
   signal?: AbortSignal,
 ): Promise<VisionResult> {
@@ -156,7 +167,7 @@ async function callQwen(
       Authorization: `Api-Key ${key}`,
       ...(process.env.FOLDER_ID ? { 'x-folder-id': process.env.FOLDER_ID } : {}),
     },
-    body: JSON.stringify(visionRequestBody({ model: MODEL_ID, mime, bytes, hintedType })),
+    body: JSON.stringify(visionRequestBody({ model: MODEL_ID, hintedType, payload })),
   });
   const text = await response.text();
   if (!response.ok) {
@@ -172,10 +183,31 @@ async function callQwen(
   } catch {
     throw new EdgeError(502, 'vision_failed', text.slice(0, 400));
   }
+  if (isDegenerateAnswer(content)) {
+    throw new EdgeError(502, 'vision_empty', `model answered with nothing: ${content.slice(0, 120)}`);
+  }
   try {
     return parseVision(content);
   } catch {
     throw new EdgeError(502, 'vision_failed', `model did not return JSON: ${content.slice(0, 200)}`);
+  }
+}
+
+/**
+ * The contour degenerates into an empty answer now and then, on a scan it read
+ * perfectly a moment earlier. One retry costs a few seconds; treating it as an
+ * unreadable document costs the person another upload.
+ */
+async function askVision(
+  payload: VisionPayload,
+  hintedType: string,
+  signal?: AbortSignal,
+): Promise<VisionResult> {
+  try {
+    return await callQwen(payload, hintedType, signal);
+  } catch (error) {
+    if (!(error instanceof EdgeError) || error.code !== 'vision_empty') throw error;
+    return await callQwen(payload, hintedType, signal);
   }
 }
 
@@ -200,30 +232,19 @@ export async function extractDocument(input: ExtractInput): Promise<ExtractResul
     );
 
     const scan = await readScan(ticket.url);
-    const kind = imageKind(item.fileName || ticket.fileName, scan.contentType);
+    const kind = scanKind(item.fileName || ticket.fileName, scan.contentType);
     if (!kind.ok) {
-      const reason = 'need a photo (jpeg/png/webp), not a PDF or office file';
-      console.log(
-        '[EXTRACT]',
-        JSON.stringify({
-          itemId,
-          organizationId,
-          bytes: scan.bytes.byteLength,
-          unreadable: true,
-          keys: [],
-          reason,
-          failure: 'unreadable',
-          status: 'rejected',
-        }),
-      );
-      await writeItem(organizationId, itemId, input.caller, {
-        status: 'rejected',
-        parced: { status: 'rejected', reason, failure: 'unreadable' },
-      });
-      return { itemId, status: 'rejected', itemType: item.itemType, unreadable: true };
+      // Office files and TIFF only. A PDF gets here and is read below.
+      throw new EdgeError(415, 'wrong_format', `${item.fileName || ticket.fileName} is not a photo or a PDF`);
     }
 
-    const vision = await callQwen(kind.mime, scan.bytes, item.itemType, controller.signal);
+    // Studio takes images and text, never PDF bytes: a PDF becomes its own
+    // text, or its first pages rendered as jpeg.
+    const payload: VisionPayload = kind.pdf
+      ? await preparePdf(scan.bytes)
+      : { kind: 'images', mime: kind.mime, pages: [scan.bytes] };
+
+    const vision = await askVision(payload, item.itemType, controller.signal);
     const itemType = vision.itemType;
     const status = vision.unreadable ? 'rejected' : 'parsed';
     console.log(
@@ -233,6 +254,8 @@ export async function extractDocument(input: ExtractInput): Promise<ExtractResul
         organizationId,
         mime: kind.mime,
         bytes: scan.bytes.byteLength,
+        read: payload.kind === 'text' ? 'pdf-text' : kind.pdf ? 'pdf-pages' : 'photo',
+        ...(payload.kind === 'images' && kind.pdf ? { pages: payload.pages.length } : {}),
         itemType,
         unreadable: vision.unreadable,
         keys: Object.keys(vision.extracted),

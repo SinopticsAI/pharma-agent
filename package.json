@@ -20,6 +20,8 @@
     "@mastra/core": "^1.63.2",
     "@mastra/memory": "^1.28.1",
     "@mastra/pg": "^1.22.2",
+    "@napi-rs/canvas": "^1.0.8",
+    "unpdf": "^1.8.1",
     "zod": "^3.25.0"
   },
   "devDependencies": {

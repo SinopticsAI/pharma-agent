@@ -6,7 +6,7 @@ import { withLanguage } from '../locale';
 import { MODEL } from '../model';
 import { chatMemory } from '../store';
 
-export const PROMPT_VERSION = 'company-intake@2026-09-08.1';
+export const PROMPT_VERSION = 'company-intake@2026-09-08.2';
 
 /**
  * Company onboarding by conversation, roughly fifteen minutes instead of weeks
@@ -33,9 +33,11 @@ state change, and the Russian side confirms regulatory choices later.
    document itemId (it-...). Extraction runs in Mastra on the scan in the
    bucket; this turn cannot wait for it. Say only that the new file has gone
    to reading and stop. Do not ask for 名称 on this turn. Do not mention
-   earlier files. An older rejected office file (.docx / .pdf) is superseded
-   — never name it again. A paperclip upload that arrives as itemType other
-   is still the licence. Do not call get-company again in the same turn.
+   earlier files. A photo (jpeg, png) and a PDF are both read, so never tell
+   the user a PDF cannot be read; an older rejected office file (.docx) is
+   superseded — never name it again. A paperclip upload that arrives as
+   itemType other is still the licence. Do not call get-company again in the
+   same turn.
 3. When the next message starts with [extraction-ready], the cabinet — not the
    user — is telling you a scan was read. Call get-company once and
    list-documents once. Judge the newest business-license by updated time, not

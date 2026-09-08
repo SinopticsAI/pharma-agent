@@ -66,6 +66,14 @@ export const mastra = new Mastra({
   memory: {
     chatMemory,
   },
+  // Reading a PDF needs a native page renderer and PDF.js with its own worker
+  // and font assets. Bundling either breaks it, so they stay external and are
+  // resolved from node_modules, which the runtime image already carries. They
+  // are imported lazily, hence dynamicPackages as well.
+  bundler: {
+    externals: ['unpdf', '@napi-rs/canvas'],
+    dynamicPackages: ['unpdf', '@napi-rs/canvas'],
+  },
   server: {
     // Same origin as the rest of the cabinet: the browser only ever talks to
     // the Edge gateway, so CORS here is a local-development convenience.

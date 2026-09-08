@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { extractFailureKind, extractFailureReason } from './extract-reason.ts';
+import { extractFailureKind, extractFailureReason, isDegenerateAnswer } from './extract-reason.ts';
 import {
-  imageKind,
   isItemType,
+  scanKind,
   schemaHint,
   visionPrompt,
   visionRequestBody,
@@ -19,17 +19,30 @@ import {
   usccLooksWrong,
 } from './license-fields.ts';
 
-describe('imageKind', () => {
+describe('scanKind', () => {
   it('accepts jpeg/png/webp by mime or extension', () => {
-    assert.deepEqual(imageKind('scan.JPG', ''), { ok: true, mime: 'image/jpeg' });
-    assert.deepEqual(imageKind('scan.bin', 'image/png'), { ok: true, mime: 'image/png' });
-    assert.deepEqual(imageKind('scan.webp', 'image/webp'), { ok: true, mime: 'image/webp' });
+    assert.deepEqual(scanKind('scan.JPG', ''), { ok: true, mime: 'image/jpeg', pdf: false });
+    assert.deepEqual(scanKind('scan.bin', 'image/png'), { ok: true, mime: 'image/png', pdf: false });
+    assert.deepEqual(scanKind('scan.webp', 'image/webp'), { ok: true, mime: 'image/webp', pdf: false });
   });
 
-  it('rejects pdf and office files', () => {
-    assert.deepEqual(imageKind('dossier.pdf', 'application/pdf'), { ok: false });
-    assert.deepEqual(imageKind('letter.docx', ''), { ok: false });
-    assert.deepEqual(imageKind('scan.tiff', ''), { ok: false });
+  it('accepts a pdf and marks it for preparation', () => {
+    assert.deepEqual(scanKind('dossier.pdf', 'application/pdf'), {
+      ok: true,
+      mime: 'application/pdf',
+      pdf: true,
+    });
+    // The cabinet does not always send a content type with the upload.
+    assert.deepEqual(scanKind('02-ifu-en-safe-accu.PDF', ''), {
+      ok: true,
+      mime: 'application/pdf',
+      pdf: true,
+    });
+  });
+
+  it('still rejects office files and tiff', () => {
+    assert.deepEqual(scanKind('letter.docx', ''), { ok: false });
+    assert.deepEqual(scanKind('scan.tiff', ''), { ok: false });
   });
 });
 
@@ -45,17 +58,44 @@ describe('extractFailureReason', () => {
     aborted.name = 'AbortError';
     assert.match(extractFailureReason(aborted), /vision_timeout/);
   });
+
+  it('names the formats intake reads when the file is not one of them', () => {
+    const reason = extractFailureReason({ code: 'wrong_format', message: 'letter.docx is not a photo or a PDF' });
+    assert.match(reason, /pdf/i);
+    assert.match(reason, /jpeg/i);
+  });
+});
+
+describe('isDegenerateAnswer', () => {
+  it('catches the empty answer Studio returns on a document it can read', () => {
+    assert.equal(isDegenerateAnswer('{"": ""}'), true);
+    assert.equal(isDegenerateAnswer('{}'), true);
+    assert.equal(isDegenerateAnswer('   '), true);
+    assert.equal(isDegenerateAnswer('{"itemType": null, "extracted": null}'), true);
+  });
+
+  it('leaves a real answer and a non-JSON answer alone', () => {
+    assert.equal(
+      isDegenerateAnswer('{"itemType":"business-license","extracted":{"company_name":"杭州信纳智析科技有限公司"}}'),
+      false,
+    );
+    // parseVision reports «did not return JSON»; that is a different failure.
+    assert.equal(isDegenerateAnswer('I cannot read this'), false);
+  });
 });
 
 describe('extractFailureKind', () => {
   it('blames the scan only when another file would help', () => {
     assert.equal(extractFailureKind({ code: 'too_large', message: 'scan is 9 MB' }), 'unreadable');
+    assert.equal(extractFailureKind({ code: 'wrong_format', message: 'letter.docx' }), 'unreadable');
   });
 
   it('blames the service for everything on our side', () => {
     // The 400 on reasoning_options landed here and sent the user hunting for a
     // better photo of a licence that read perfectly well.
     assert.equal(extractFailureKind({ code: 'vision_failed', message: 'Unsupported parameter(s)' }), 'service');
+    // An empty answer after the retry is the contour, not the document.
+    assert.equal(extractFailureKind({ code: 'vision_empty', message: '{"": ""}' }), 'service');
     assert.equal(extractFailureKind({ code: 'not_configured', message: 'no key' }), 'service');
     assert.equal(extractFailureKind({ code: 'download_failed', message: 'presigned GET 403' }), 'service');
     const aborted = new Error('aborted');
@@ -68,9 +108,8 @@ describe('extractFailureKind', () => {
 describe('visionRequestBody', () => {
   const body = visionRequestBody({
     model: 'gpt://folder/qwen3.6-35b-a3b',
-    mime: 'image/jpeg',
-    bytes: new Uint8Array([1, 2, 3]),
     hintedType: 'business-license',
+    payload: { kind: 'images', mime: 'image/jpeg', pages: [new Uint8Array([1, 2, 3])] },
   });
 
   it('carries the only thinking switch Studio accepts', () => {
@@ -100,6 +139,43 @@ describe('visionRequestBody', () => {
   it('drops /no_think: the model ignores it and it only muddies the prompt', () => {
     assert.equal(visionPrompt('business-license').includes('/no_think'), false);
     assert.match(visionPrompt('business-license'), /company_name/);
+  });
+
+  it('sends the pages of a scanned pdf as images, never the pdf itself', () => {
+    const pdfPages = visionRequestBody({
+      model: 'gpt://folder/qwen3.6-35b-a3b',
+      hintedType: 'instruction-cn',
+      payload: {
+        kind: 'images',
+        mime: 'image/jpeg',
+        pages: [new Uint8Array([1]), new Uint8Array([2])],
+      },
+    });
+    const messages = pdfPages.messages as { content: { type: string }[] }[];
+    assert.deepEqual(
+      messages[0].content.map((part) => part.type),
+      ['text', 'image_url', 'image_url'],
+    );
+    // Studio answers 400 to data:application/pdf in image_url.
+    assert.equal(JSON.stringify(pdfPages).includes('application/pdf'), false);
+  });
+
+  it('sends the text of a digital pdf as text, with no image part', () => {
+    const fromText = visionRequestBody({
+      model: 'gpt://folder/qwen3.6-35b-a3b',
+      hintedType: 'instruction-ru',
+      payload: { kind: 'text', text: 'INSTRUCTION FOR USE\nModel: MH-200' },
+    });
+    const messages = fromText.messages as { content: { type: string; text?: string }[] }[];
+    assert.deepEqual(
+      messages[0].content.map((part) => part.type),
+      ['text'],
+    );
+    assert.match(messages[0].content[0].text ?? '', /Model: MH-200/);
+    // The prompt must not call a text extract a scan.
+    assert.match(messages[0].content[0].text ?? '', /You read the text of/);
+    assert.equal(JSON.stringify(fromText).includes('image_url'), false);
+    assert.equal(JSON.stringify(fromText).includes('application/pdf'), false);
   });
 });
 

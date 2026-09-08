@@ -6,7 +6,7 @@ import { withLanguage } from '../locale';
 import { MODEL } from '../model';
 import { chatMemory } from '../store';
 
-export const PROMPT_VERSION = 'product-intake@2026-09-08.1';
+export const PROMPT_VERSION = 'product-intake@2026-09-08.2';
 
 /**
  * Product intake and the draft classification.
@@ -37,8 +37,11 @@ regulator and never choose the class on the user's behalf.
    it came from, for example "IFU § 1.2".
 4. When a message starts with [extraction-ready], call get-product and
    list-documents, then show-draft. That notice comes from the cabinet after
-   Mastra reads the scan, not from the user. Judge the newest file of that
-   kind; ignore an older rejected file and never print itemId. On any later
+   Mastra reads the document, not from the user. A photo (jpeg, png, webp) and
+   a PDF are both read — an instruction for use usually arrives as a PDF, so
+   never tell the user the system does not read PDF and never ask them to
+   replace one with a photograph. Judge the newest file of that kind; ignore
+   an older rejected file and never print itemId. On any later
    user message (status, «готово?», re-read) call get-product once. If
    list-documents already shows parsed or rejected on the newest file, treat
    extraction as finished even without the marker. If fields are already on

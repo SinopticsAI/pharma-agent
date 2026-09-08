@@ -56,16 +56,32 @@ export const SCHEMA_HINTS: Record<ItemType, string> = {
 
 const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'webp']);
 const IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
+const PDF_MIME = 'application/pdf';
 
-export function imageKind(fileName: string, contentType = ''): { ok: true; mime: string } | { ok: false } {
+/**
+ * What intake will read. A PDF passes, but it never reaches the model as
+ * bytes: Studio answers 400 to `data:application/pdf` in image_url and to the
+ * `file` / `input_file` parts, so a PDF is turned into text or into rendered
+ * pages first. Office files and TIFF still stop here.
+ */
+export function scanKind(
+  fileName: string,
+  contentType = '',
+): { ok: true; mime: string; pdf: boolean } | { ok: false } {
   const mime = contentType.split(';')[0]?.trim().toLowerCase() ?? '';
   if (IMAGE_MIME.has(mime)) {
-    return { ok: true, mime: mime === 'image/jpg' ? 'image/jpeg' : mime };
+    return { ok: true, mime: mime === 'image/jpg' ? 'image/jpeg' : mime, pdf: false };
   }
+  if (mime === PDF_MIME) return { ok: true, mime: PDF_MIME, pdf: true };
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
   if (IMAGE_EXT.has(ext)) {
-    return { ok: true, mime: ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg' };
+    return {
+      ok: true,
+      mime: ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg',
+      pdf: false,
+    };
   }
+  if (ext === 'pdf') return { ok: true, mime: PDF_MIME, pdf: true };
   return { ok: false };
 }
 
@@ -82,9 +98,22 @@ export function schemaHint(itemType: string): string {
 /** A read licence is around 600 characters; the rest is headroom. */
 const MAX_TOKENS = 4096;
 
-export function visionPrompt(hintedType: string): string {
+export type VisionSource = 'scan' | 'text';
+
+/**
+ * What actually reaches Studio. Only these two shapes exist there: a data URI
+ * that starts with `data:image/`, and plain text. A photo is one page; a PDF
+ * arrives here already turned into its text or into rendered pages.
+ */
+export type VisionPayload =
+  | { kind: 'images'; mime: string; pages: Uint8Array[] }
+  | { kind: 'text'; text: string };
+
+export function visionPrompt(hintedType: string, source: VisionSource = 'scan'): string {
   return [
-    'You read one scan of a Chinese manufacturer document for MedMost intake.',
+    source === 'text'
+      ? 'You read the text of a Chinese manufacturer document for MedMost intake.'
+      : 'You read one scan of a Chinese manufacturer document for MedMost intake.',
     'Return a single JSON object, no markdown.',
     'Keys: itemType, extracted, unreadable, reason.',
     `itemType must be one of: ${ITEM_TYPES.join(', ')}.`,
@@ -106,25 +135,27 @@ export function visionPrompt(hintedType: string): string {
  */
 export function visionRequestBody(input: {
   model: string;
-  mime: string;
-  bytes: Uint8Array;
   hintedType: string;
+  payload: VisionPayload;
 }): Record<string, unknown> {
-  const dataUri = `data:${input.mime};base64,${Buffer.from(input.bytes).toString('base64')}`;
+  const { payload } = input;
+  const prompt = visionPrompt(input.hintedType, payload.kind === 'text' ? 'text' : 'scan');
+  const content =
+    payload.kind === 'text'
+      ? [{ type: 'text', text: `${prompt}\n\nDOCUMENT TEXT:\n${payload.text}` }]
+      : [
+          { type: 'text', text: prompt },
+          ...payload.pages.map((bytes) => ({
+            type: 'image_url',
+            image_url: { url: `data:${payload.mime};base64,${Buffer.from(bytes).toString('base64')}` },
+          })),
+        ];
   return {
     model: input.model,
     temperature: 0,
     max_tokens: MAX_TOKENS,
     reasoning_effort: 'none',
     response_format: { type: 'json_object' },
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: visionPrompt(input.hintedType) },
-          { type: 'image_url', image_url: { url: dataUri } },
-        ],
-      },
-    ],
+    messages: [{ role: 'user', content }],
   };
 }
