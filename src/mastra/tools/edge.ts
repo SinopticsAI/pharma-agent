@@ -10,6 +10,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import { jsonish } from './jsonish';
+
 const EDGE_BASE = process.env.EDGE_API_BASE ?? '';
 const EDGE_KEY = process.env.EDGE_API_KEY ?? '';
 
@@ -137,7 +139,7 @@ function callerOf(context: unknown): CallContext {
   };
 }
 
-const L10n = z.object({ ru: z.string(), en: z.string().optional(), zh: z.string().optional() });
+const L10n = jsonish(z.object({ ru: z.string(), en: z.string().optional(), zh: z.string().optional() }));
 
 // ------------------------------------------------------------------ company --
 
@@ -214,12 +216,14 @@ export const patchCompanyDraft = createTool({
     'Correct a recognised field the user disagreed with. Keep the source so the card stays checkable.',
   inputSchema: z.object({
     organizationId: z.string().optional(),
-    draft: z.record(
-      z.object({
-        value: z.string(),
-        source: z.string().optional(),
-        confidence: z.number().nullable().optional(),
-      }),
+    draft: jsonish(
+      z.record(
+        z.object({
+          value: z.string(),
+          source: z.string().optional(),
+          confidence: z.number().nullable().optional(),
+        }),
+      ),
     ),
   }),
   execute: async ({ organizationId, draft }, context) =>
@@ -285,12 +289,14 @@ export const patchProductDraft = createTool({
     'Write recognised or user-supplied product facts. A one-line answer is as valid as a file.',
   inputSchema: z.object({
     productId: z.string().optional(),
-    draft: z.record(
-      z.object({
-        value: z.string(),
-        source: z.string().optional(),
-        confidence: z.number().nullable().optional(),
-      }),
+    draft: jsonish(
+      z.record(
+        z.object({
+          value: z.string(),
+          source: z.string().optional(),
+          confidence: z.number().nullable().optional(),
+        }),
+      ),
     ),
     name: z.string().optional(),
     kind: z.enum(['device', 'drug']).optional(),
@@ -319,8 +325,8 @@ export const proposeVariants = createTool({
     productId: z.string().optional(),
     model: z.string().optional(),
     promptVersion: z.string().optional(),
-    variants: z
-      .array(
+    variants: jsonish(
+      z.array(
         z.object({
           variantType: z.enum(['recommended', 'alternative', 'forbidden']),
           kind: z.enum(['device', 'drug']),
@@ -328,19 +334,19 @@ export const proposeVariants = createTool({
           riskClass: z.enum(['1', '2a', '2b', '3']),
           title: L10n,
           summary: L10n,
-          pros: z.array(L10n).optional(),
-          cons: z.array(L10n).optional(),
+          pros: jsonish(z.array(L10n)).optional(),
+          cons: jsonish(z.array(L10n)).optional(),
           reason: L10n.optional(),
-          budget: z
-            .object({
+          budget: jsonish(
+            z.object({
               currency: z.literal('RMB'),
               baskets: z.array(z.object({ key: z.string(), amount: z.number() })),
-            })
-            .optional(),
+            }),
+          ).optional(),
           cycleMonths: z.tuple([z.number(), z.number()]).optional(),
         }),
-      )
-      .min(1),
+      ).min(1),
+    ),
   }),
   execute: async ({ productId, ...body }, context) =>
     edge(`/products/${resolveProductId(productId, context)}/variants`, { method: 'POST', body }, callerOf(context)),

@@ -10,7 +10,9 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-const L10n = z.object({ ru: z.string(), en: z.string().optional(), zh: z.string().optional() });
+import { boolish, jsonish } from './jsonish';
+
+const L10n = jsonish(z.object({ ru: z.string(), en: z.string().optional(), zh: z.string().optional() }));
 
 export const askDocument = createTool({
   id: 'ask-document',
@@ -19,7 +21,7 @@ export const askDocument = createTool({
   inputSchema: z.object({
     itemType: z.string().describe('business-license, instruction-cn, tech-spec, and so on'),
     question: L10n,
-    acceptsText: z.boolean().default(false).describe('true when one line of text closes the gap'),
+    acceptsText: boolish().default(false).describe('true when one line of text closes the gap'),
     why: L10n.optional().describe('what breaks without it, in the user language'),
   }),
   outputSchema: z.object({ shown: z.literal(true) }),
@@ -33,17 +35,19 @@ export const showDraft = createTool({
   inputSchema: z.object({
     scope: z.enum(['company', 'product']),
     entityId: z.string(),
-    fields: z.array(
-      z.object({
-        key: z.string(),
-        label: L10n,
-        value: z.string(),
-        source: z.string(),
-        confidence: z.number().nullable().optional(),
-      }),
+    fields: jsonish(
+      z.array(
+        z.object({
+          key: z.string(),
+          label: L10n,
+          value: z.string(),
+          source: z.string(),
+          confidence: z.number().nullable().optional(),
+        }),
+      ),
     ),
-    missing: z.array(z.string()).default([]),
-    canApprove: z.boolean(),
+    missing: jsonish(z.array(z.string())).default([]),
+    canApprove: boolish(),
   }),
   outputSchema: z.object({ shown: z.literal(true) }),
   execute: async () => ({ shown: true as const }),
@@ -55,23 +59,25 @@ export const showVariants = createTool({
     'Show classification options side by side with budget baskets in RMB. Always carry the planning-frame disclaimer, and include the forbidden option when the fork exists.',
   inputSchema: z.object({
     productId: z.string(),
-    variants: z.array(
-      z.object({
-        id: z.string(),
-        variantType: z.enum(['recommended', 'alternative', 'forbidden']),
-        title: L10n,
-        summary: L10n,
-        pros: z.array(L10n).default([]),
-        cons: z.array(L10n).default([]),
-        reason: L10n.optional(),
-        budget: z
-          .object({
-            currency: z.literal('RMB'),
-            baskets: z.array(z.object({ key: z.string(), amount: z.number() })),
-          })
-          .optional(),
-        cycleMonths: z.tuple([z.number(), z.number()]).optional(),
-      }),
+    variants: jsonish(
+      z.array(
+        z.object({
+          id: z.string(),
+          variantType: z.enum(['recommended', 'alternative', 'forbidden']),
+          title: L10n,
+          summary: L10n,
+          pros: jsonish(z.array(L10n)).default([]),
+          cons: jsonish(z.array(L10n)).default([]),
+          reason: L10n.optional(),
+          budget: jsonish(
+            z.object({
+              currency: z.literal('RMB'),
+              baskets: z.array(z.object({ key: z.string(), amount: z.number() })),
+            }),
+          ).optional(),
+          cycleMonths: z.tuple([z.number(), z.number()]).optional(),
+        }),
+      ),
     ),
   }),
   outputSchema: z.object({ shown: z.literal(true) }),
@@ -87,9 +93,9 @@ export const showRiskReport = createTool({
     level: z.enum(['low', 'medium', 'high', 'unknown']),
     verdict: z.enum(['pending', 'accepted', 'rejected']),
     reasoning: L10n,
-    checks: z
-      .array(z.object({ name: z.string(), result: z.string(), detail: z.string().optional() }))
-      .default([]),
+    checks: jsonish(
+      z.array(z.object({ name: z.string(), result: z.string(), detail: z.string().optional() })),
+    ).default([]),
   }),
   outputSchema: z.object({ shown: z.literal(true) }),
   execute: async () => ({ shown: true as const }),
@@ -101,15 +107,17 @@ export const showNodeMap = createTool({
     'Show the M0-M12 map of the case. Nodes after filing stay visible with status later so the horizon is a year, not a dossier.',
   inputSchema: z.object({
     caseId: z.string(),
-    nodes: z.array(
-      z.object({
-        code: z.string(),
-        title: L10n,
-        status: z.enum(['done', 'in_progress', 'planned', 'later', 'goal']),
-        owner: z.enum(['you', 'us', 'contractor', 'gov']),
-        dueHint: L10n.optional(),
-        critical: z.boolean().default(false),
-      }),
+    nodes: jsonish(
+      z.array(
+        z.object({
+          code: z.string(),
+          title: L10n,
+          status: z.enum(['done', 'in_progress', 'planned', 'later', 'goal']),
+          owner: z.enum(['you', 'us', 'contractor', 'gov']),
+          dueHint: L10n.optional(),
+          critical: boolish().default(false),
+        }),
+      ),
     ),
   }),
   outputSchema: z.object({ shown: z.literal(true) }),

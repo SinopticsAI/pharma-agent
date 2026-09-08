@@ -12,7 +12,7 @@
     "build": "mastra build",
     "start": "node .mastra/output/index.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/mastra/extract.test.ts"
+    "test": "node --experimental-strip-types --test src/mastra/extract.test.ts src/mastra/tools/jsonish.test.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^1.0.0",
