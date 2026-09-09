@@ -124,6 +124,17 @@ export const showNodeMap = createTool({
   execute: async () => ({ shown: true as const }),
 });
 
+export const offerProductWindow = createTool({
+  id: 'offer-product-window',
+  description:
+    'Show a button that opens the product intake window. Use it after the company card is approved. This chat does not collect the product.',
+  inputSchema: z.object({
+    organizationId: z.string().optional(),
+  }),
+  outputSchema: z.object({ shown: z.literal(true) }),
+  execute: async () => ({ shown: true as const }),
+});
+
 export const escalateToCounsel = createTool({
   id: 'escalate-to-counsel',
   description:
@@ -142,5 +153,6 @@ export const cardTools = {
   showVariants,
   showRiskReport,
   showNodeMap,
+  offerProductWindow,
   escalateToCounsel,
 };
