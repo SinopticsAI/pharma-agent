@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 
 import { cardTools } from '../tools/cards';
-import { edgeTools } from '../tools/edge';
+import { productEdgeTools } from '../tools/edge';
 import { withLanguage } from '../locale';
 import { MODEL } from '../model';
 import { chatMemory } from '../store';
@@ -91,7 +91,7 @@ export const productIntake = new Agent({
   id: 'productIntake',
   name: 'Product intake',
   model: MODEL,
-  tools: { ...edgeTools, ...cardTools },
+  tools: { ...productEdgeTools, ...cardTools },
   memory: chatMemory,
   defaultOptions: { maxSteps: 5 },
   instructions: ({ requestContext }) => {

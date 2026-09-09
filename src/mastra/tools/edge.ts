@@ -146,7 +146,7 @@ const L10n = jsonish(z.object({ ru: z.string(), en: z.string().optional(), zh: z
 export const getCompany = createTool({
   id: 'get-company',
   description:
-    'Read a company: draft fields with their sources, approved profile, checklist slots and completeness by section. The current company id is already in the dialog — do not invent org-....',
+    'Read a company: draft fields with their sources, approved profile, checklist slots and completeness by section. completeness.percent is legalization progress, not whether the card exists — a draft with legalName or registrationNumber is already a company card. The current company id is already in the dialog — do not invent org-....',
   inputSchema: z.object({ organizationId: z.string().optional() }),
   execute: async ({ organizationId }, context) =>
     edge(`/organizations/${resolveOrganizationId(organizationId, context)}`, {}, callerOf(context)),
@@ -260,7 +260,8 @@ export const getRiskReport = createTool({
 
 export const createProduct = createTool({
   id: 'create-product',
-  description: 'Open a product card. Only possible once the company profile is approved.',
+  description:
+    'Open a product card. Allowed once the company card has legalName and registrationNumber; a full legalization checklist is not required. The company dialog must not call this — the cabinet opens the product window.',
   inputSchema: z.object({
     organizationId: z.string().optional(),
     name: z.string().optional(),
@@ -392,7 +393,7 @@ export const appendChatMessage = createTool({
     edge(`/intake/sessions/${sessionId}/messages`, { method: 'POST', body }, callerOf(context)),
 });
 
-export const edgeTools = {
+export const companyEdgeTools = {
   listCompanies,
   createCompany,
   getCompany,
@@ -402,6 +403,15 @@ export const edgeTools = {
   listDocuments,
   promoteToCompanyProfile,
   getRiskReport,
+  getCase,
+  appendChatMessage,
+};
+
+export const productEdgeTools = {
+  getCompany,
+  requestUpload,
+  listDocuments,
+  promoteToCompanyProfile,
   createProduct,
   getProduct,
   patchProductDraft,
@@ -410,4 +420,9 @@ export const edgeTools = {
   approveClassification,
   getCase,
   appendChatMessage,
+};
+
+export const edgeTools = {
+  ...companyEdgeTools,
+  ...productEdgeTools,
 };
