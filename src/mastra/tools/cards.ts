@@ -2,9 +2,8 @@
  * Cards the cabinet renders instead of prose.
  *
  * These tools produce no side effects: calling one is how the agent says
- * "show this". assistant-ui picks them up through makeAssistantToolUI, so the
- * draft table, the option picker and the upload block are real components with
- * real buttons rather than a paragraph the user has to parse.
+ * "show this". The cabinet draws a read-only component. The user answers,
+ * approves and attaches files only in the composer — never on the card.
  */
 
 import { createTool } from '@mastra/core/tools';
@@ -17,7 +16,7 @@ const L10n = jsonish(z.object({ ru: z.string(), en: z.string().optional(), zh: z
 export const askDocument = createTool({
   id: 'ask-document',
   description:
-    'Ask for one specific thing. Offer a file when a document is the only source, and a single line of text when an answer is enough — never a questionnaire.',
+    'Ask for one specific thing. The card shows the question only: the user replies in the composer or attaches a file with the paperclip — never a form on the card, never a questionnaire.',
   inputSchema: z.object({
     itemType: z.string().describe('business-license, instruction-cn, tech-spec, and so on'),
     question: L10n,
@@ -31,7 +30,7 @@ export const askDocument = createTool({
 export const showDraft = createTool({
   id: 'show-draft',
   description:
-    'Show the recognised card for review. Every field carries the document it came from; a field without a source cannot be checked and must not be shown as fact.',
+    'Show the recognised card for review. Every field carries the document it came from; a field without a source cannot be checked and must not be shown as fact. The user approves or corrects it in the composer, not on the card.',
   inputSchema: z.object({
     scope: z.enum(['company', 'product']),
     entityId: z.string(),
@@ -56,7 +55,7 @@ export const showDraft = createTool({
 export const showVariants = createTool({
   id: 'show-variants',
   description:
-    'Show classification options side by side with budget baskets in RMB. Always carry the planning-frame disclaimer, and include the forbidden option when the fork exists.',
+    'Show classification options side by side with budget baskets in RMB. Always carry the planning-frame disclaimer, and include the forbidden option when the fork exists. The user names the chosen option in the composer.',
   inputSchema: z.object({
     productId: z.string(),
     variants: jsonish(
@@ -127,7 +126,7 @@ export const showNodeMap = createTool({
 export const offerProductWindow = createTool({
   id: 'offer-product-window',
   description:
-    'Show a button that opens the product intake window. Use it after the company card is approved. This chat does not collect the product.',
+    'Show a hint that a product can be entered in another cabinet window. Use it after the company card is approved. This chat does not collect the product and does not open that window.',
   inputSchema: z.object({
     organizationId: z.string().optional(),
   }),
