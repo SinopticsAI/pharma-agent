@@ -67,7 +67,15 @@ export async function edge<T>(
     parsed = { error: 'edge_error', message: text.slice(0, 300) };
   }
   if (!response.ok) {
-    throw new EdgeError(response.status, parsed.error ?? 'edge_error', parsed.message ?? text);
+    const extras = parsed as { existingOrganizationId?: string; registrationNumber?: string };
+    const suffix = extras.existingOrganizationId
+      ? ` existingOrganizationId=${extras.existingOrganizationId}`
+      : '';
+    throw new EdgeError(
+      response.status,
+      parsed.error ?? 'edge_error',
+      `${parsed.message ?? text}${suffix}`,
+    );
   }
   return parsed.data as T;
 }
@@ -154,9 +162,13 @@ export const getCompany = createTool({
 
 export const listCompanies = createTool({
   id: 'list-companies',
-  description: 'List the companies of the current account.',
-  inputSchema: z.object({}),
-  execute: async (_input, context) => edge('/organizations', {}, callerOf(context)),
+  description:
+    'List the companies of the current account. Pass uscc (统一社会信用代码 / registrationNumber) to find an existing card with that number. An empty list means this account has no such company yet.',
+  inputSchema: z.object({ uscc: z.string().optional() }),
+  execute: async ({ uscc }, context) => {
+    const query = uscc?.trim() ? `?uscc=${encodeURIComponent(uscc.trim())}` : '';
+    return edge(`/organizations${query}`, {}, callerOf(context));
+  },
 });
 
 export const createCompany = createTool({
@@ -191,7 +203,7 @@ export const requestUpload = createTool({
 export const listDocuments = createTool({
   id: 'list-documents',
   description:
-    'Documents of a company and its products, with extraction results. Use it before asking for a file: a company document is never uploaded twice. When several files share an itemType, only the newest updatedAt matters — ignore older rejected office files. parcedData.failure says who has to act on a rejection: service is our fault, unreadable is the scan. parcedData.extracted.uscc_checksum=invalid means the registration number was misread.',
+    'Documents of a company and its products, with extraction results. Use it before asking for a file: a company document is never uploaded twice. When several files share an itemType, only the newest updatedAt matters — ignore older rejected office files. parcedData.failure says who has to act on a rejection: service is our fault, unreadable is the scan. parcedData.extracted.uscc_checksum=invalid means the registration number was misread. parcedData.duplicate_uscc means this licence already belongs to another company on the account — read organizationId and registrationNumber there, then list-companies with that uscc; do not approve this card.',
   inputSchema: z.object({ organizationId: z.string().optional() }),
   execute: async ({ organizationId }, context) =>
     edge(`/organizations/${resolveOrganizationId(organizationId, context)}/items`, {}, callerOf(context)),
