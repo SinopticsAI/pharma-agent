@@ -333,7 +333,7 @@ export const approveProductData = createTool({
 export const proposeVariants = createTool({
   id: 'propose-variants',
   description:
-    'Write classification options. Only allowed at full completeness. Include a forbidden option with a reason whenever a tempting wrong class exists — it is shown as a warning and cannot be selected.',
+    'Write classification options. The core accepts them once the card has a name and an intended use; a completeness below 100 is not a refusal. Include a forbidden option with a reason whenever a tempting wrong class exists — it is shown as a warning and cannot be selected.',
   inputSchema: z.object({
     productId: z.string().optional(),
     model: z.string().optional(),
@@ -368,12 +368,15 @@ export const proposeVariants = createTool({
 export const approveClassification = createTool({
   id: 'approve-classification',
   description:
-    'Record an approval of the classification. The specialist confirms first and the client second; the case and its node map appear only after both.',
+    'Record an approval of the option the user named. as=specialist fixes the chosen variantId, as=client is what makes the core build the case and its node map, and it is refused until the first call landed. Never call either one for an option the user did not name, and never for the forbidden one.',
   inputSchema: z.object({
     productId: z.string().optional(),
     as: z.enum(['specialist', 'client']),
     variantId: z.string().optional(),
-    checkedAgainst: z.string().optional(),
+    checkedAgainst: z
+      .string()
+      .optional()
+      .describe('what the class was checked against: nomenclature kind, clause of order 4н, edition of the list'),
   }),
   execute: async ({ productId, ...body }, context) =>
     edge(`/products/${resolveProductId(productId, context)}/approve`, { method: 'POST', body }, callerOf(context)),
