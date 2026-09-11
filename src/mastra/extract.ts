@@ -239,7 +239,7 @@ export async function extractDocument(input: ExtractInput): Promise<ExtractResul
     }
 
     // Studio takes images and text, never PDF bytes: a PDF becomes its own
-    // text, or its first pages rendered as jpeg.
+    // text, or its first pages rendered as jpeg. A photo goes as-is from the bucket.
     const payload: VisionPayload = kind.pdf
       ? await preparePdf(scan.bytes)
       : { kind: 'images', mime: kind.mime, pages: [scan.bytes] };
