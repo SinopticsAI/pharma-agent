@@ -182,7 +182,11 @@ describe('visionRequestBody', () => {
 describe('extract schemas', () => {
   it('keeps Plane snake_case keys on a business licence', () => {
     assert.equal(isItemType('business-license'), true);
+    assert.equal(isItemType('signatory'), true);
+    assert.equal(isItemType('bank-account'), true);
     assert.match(schemaHint('business-license'), /company_name/);
+    assert.match(schemaHint('signatory'), /legal_representative/);
+    assert.match(schemaHint('bank-account'), /account_number/);
     assert.match(schemaHint('other'), /营业执照/);
   });
 });

@@ -140,3 +140,4 @@ export const productIntake = new Agent({
     return withLanguage(INSTRUCTIONS + extra, requestContext?.get('locale'));
   },
 });
+Яр

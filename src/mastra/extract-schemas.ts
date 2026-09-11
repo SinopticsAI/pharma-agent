@@ -12,6 +12,8 @@ export const ITEM_TYPES = [
   'company-registry',
   'iso-13485',
   'poa-upp',
+  'signatory',
+  'bank-account',
   'site-docs',
   'gmp-cn',
   'trademark',
@@ -35,6 +37,10 @@ export const SCHEMA_HINTS: Record<ItemType, string> = {
     'Extract: certification_body, certificate_number, sites, scope, valid_until.',
   'poa-upp':
     'Extract: principal, attorney, valid_until, apostille, powers.',
+  signatory:
+    'Chinese legal-representative proof 法定代表人身份证明, or a TEST schematic 身份证 of that person. Extract: legal_representative (姓名 / 法定代表人), company_name, unified_social_credit_code, valid_until if present. Never invent a real 身份证 number.',
+  'bank-account':
+    'Chinese basic deposit account permit 开户许可证. Extract: account_name, account_number, bank_name, permit_no, currency, legal_representative, unified_social_credit_code, company_name.',
   'site-docs':
     'Extract: site_address, ownership, valid_until, issuing_authority, activities.',
   'gmp-cn':
@@ -51,7 +57,7 @@ export const SCHEMA_HINTS: Record<ItemType, string> = {
   'regulator-letter':
     'Extract: authority, request_type, due_date, missing_files, letter_date.',
   other:
-    'If this is a Chinese business licence 营业执照, treat it as business-license: company_name is 名称 (Chinese), company_name_en is 英文名称. Otherwise extract the key regulatory fields present.',
+    'If this is a Chinese business licence 营业执照, treat it as business-license: company_name is 名称 (Chinese), company_name_en is 英文名称. If this is 授权委托书 appointing an authorized representative, treat it as poa-upp. If this is 法定代表人身份证明 or a 身份证 of the legal representative, treat it as signatory. If this is 开户许可证 or RMB bank details, treat it as bank-account. Otherwise extract the key regulatory fields present.',
 };
 
 const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'webp']);
@@ -117,7 +123,7 @@ export function visionPrompt(hintedType: string, source: VisionSource = 'scan'):
     'Return a single JSON object, no markdown.',
     'Keys: itemType, extracted, unreadable, reason.',
     `itemType must be one of: ${ITEM_TYPES.join(', ')}.`,
-    `The uploader labelled this file as "${hintedType}". If it is a 营业执照, itemType is business-license even when the label is other.`,
+    `The uploader labelled this file as "${hintedType}". If it is a 营业执照, itemType is business-license even when the label is other. Same for 授权委托书 → poa-upp, 法定代表人身份证明 → signatory, 开户许可证 → bank-account.`,
     schemaHint(hintedType),
     'extracted: object of English snake_case keys to string values or null. Do not invent a name or a registration number.',
     'unreadable: true only when nothing usable can be read. A unified social credit code without 名称 is incomplete, not unreadable.',
