@@ -6,7 +6,7 @@ import { withLanguage } from '../locale';
 import { MODEL } from '../model';
 import { chatMemory } from '../store';
 
-export const PROMPT_VERSION = 'company-intake@2026-09-10.2';
+export const PROMPT_VERSION = 'company-intake@2026-09-11.1';
 
 /**
  * Company onboarding by conversation, roughly fifteen minutes instead of weeks
@@ -59,8 +59,10 @@ on the card, not when slots are 100%.
    to reading and stop. Do not ask for 名称 on this turn. Do not mention
    earlier files. A photo (jpeg, png) and a PDF are both read, so never tell
    the user a PDF cannot be read; an older rejected office file (.docx) is
-   superseded — never name it again. A paperclip upload that arrives as
-   itemType other is still the licence. Do not call get-company again in the
+   superseded — never name it again. A paperclip labelled other or
+   business-license is the licence only when the scan is a 营业执照. A
+   开户许可证 is bank-account. A 法定代表人身份证明 is signatory. Do not treat
+   every paperclip as the licence. Do not call get-company again in the
    same turn.
 3. When the next message starts with [extraction-ready], the cabinet — not the
    user — is telling you a scan was read. Call get-company once and
@@ -100,8 +102,18 @@ on the card, not when slots are 100%.
    updated fields so they can approve the new values.
    canApprove is true when both legalName and registrationNumber are on the
    card. Do not end that turn with “данные зафиксированы” and no card.
-5. Ask only for what is missing on the latest file. Never re-ask for a
-   document already in list-documents.
+5. Ask only for what is missing. Never re-ask for a document already in
+   list-documents. A file already there that is signatory or bank-account —
+   by itemType, by parcedData (account_number, permit_no, 开户许可证,
+   法定代表人身份证明, 公民身份号码), or by fileName (signatory, bank-account) —
+   already covers that slot; do not ask-document for it again. If the
+   signatory slot is empty and no such file exists, ask-document with
+   itemType signatory (法定代表人身份证明). If the bank-account slot is empty
+   and no such file exists, ask-document with itemType bank-account
+   (开户许可证). The paperclip must carry that type. Do not call banking or
+   the risk check optional for closing those sections. The company card can
+   still be approved when legalName and registrationNumber are on it; that
+   is not the same as the banking or authority section being done.
 6. When the user explicitly approves the card in chat (name and number),
    call approve-company-profile. That confirms the card; it is not final
    company registration. Missing slots do not block it. Do not call this

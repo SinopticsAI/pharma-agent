@@ -4,6 +4,31 @@
  * sees company_name / unified_social_credit_code.
  */
 
+const SLOT_ITEM_TYPES = [
+  'business-license',
+  'company-registry',
+  'iso-13485',
+  'poa-upp',
+  'signatory',
+  'bank-account',
+  'site-docs',
+  'gmp-cn',
+  'trademark',
+  'nmpa-certificate',
+  'instruction-cn',
+  'instruction-ru',
+  'tech-spec',
+  'lab-protocol',
+  'regulator-letter',
+  'other',
+] as const;
+
+type SlotItemType = (typeof SLOT_ITEM_TYPES)[number];
+
+function isSlotItemType(value: string): value is SlotItemType {
+  return (SLOT_ITEM_TYPES as readonly string[]).includes(value);
+}
+
 const USCC_RE = /(?<![0-9A-Za-z])([0-9A-Z]{18})(?![0-9A-Za-z])/;
 /** 名称 as a suffix of 英文名称 must not match: samples2 prints EN above 名称. */
 const NAME_RE =
@@ -224,6 +249,83 @@ export function hasLicenseIdentity(extracted: ExtractedFields): boolean {
 /** After recover: reject only when nothing usable landed. */
 export function hasExtractedValue(extracted: ExtractedFields): boolean {
   return Object.values(extracted).some((value) => isFilledValue(value));
+}
+
+/** Bank / signatory slots close only on these types, never on company+USCC. */
+const BANK_KEYS = ['account_number', 'permit_no', 'bank_name', 'account_name', '开户许可证'] as const;
+const SIGNATORY_KEYS = ['id_number', 'citizen_id', 'identity_number', '公民身份号码', '居民身份证'] as const;
+const LICENSE_EXTRA_KEYS = ['registered_capital', '注册资本', 'business_scope', '经营范围'] as const;
+
+function extractedBlob(extracted: ExtractedFields, extra = ''): string {
+  const lines = [extra];
+  for (const [key, value] of Object.entries(extracted)) {
+    lines.push(key, value ?? '');
+  }
+  return lines.join('\n');
+}
+
+function hasFilledKeys(extracted: ExtractedFields, keys: readonly string[]): boolean {
+  return keys.some((key) => Boolean(filled(extracted, [key])));
+}
+
+function footerItemType(blob: string): SlotItemType | '' {
+  const folded = blob.toLowerCase().replace(/\s+/g, '');
+  const match = /itemtype=([a-z0-9-]+)/.exec(folded);
+  if (match?.[1] && isSlotItemType(match[1]) && match[1] !== 'other') return match[1];
+  return '';
+}
+
+function fileNameHint(fileName: string): SlotItemType | '' {
+  const name = fileName.toLowerCase();
+  if (name.includes('bank-account')) return 'bank-account';
+  if (name.includes('signatory')) return 'signatory';
+  if (name.includes('yingye-zhizhao') || name.includes('business-license')) return 'business-license';
+  return '';
+}
+
+/**
+ * Vision often keeps the upload label (`business-license` / `other`) on a
+ * 开户许可证 or 法定代表人身份证明. Slots close only on the exact type.
+ */
+export function recoverItemType(
+  hinted: string,
+  extracted: ExtractedFields,
+  visionType = '',
+  fileName = '',
+): SlotItemType {
+  const blob = extractedBlob(extracted, `${hinted}\n${visionType}\n${fileName}`);
+  const fromFooter = footerItemType(blob);
+  const fromFile = fileNameHint(fileName);
+
+  const bank =
+    hasFilledKeys(extracted, BANK_KEYS) ||
+    blob.includes('开户许可证') ||
+    fromFooter === 'bank-account' ||
+    fromFile === 'bank-account';
+  if (bank) return 'bank-account';
+
+  const signatory =
+    hasFilledKeys(extracted, SIGNATORY_KEYS) ||
+    blob.includes('法定代表人身份证明') ||
+    fromFooter === 'signatory' ||
+    fromFile === 'signatory';
+  if (signatory) return 'signatory';
+
+  if (fromFooter && fromFooter !== 'business-license') return fromFooter;
+
+  if (isSlotItemType(visionType) && visionType !== 'other' && visionType !== 'business-license') {
+    return visionType;
+  }
+
+  const license =
+    fromFooter === 'business-license' ||
+    fromFile === 'business-license' ||
+    (blob.includes('营业执照') && hasFilledKeys(extracted, LICENSE_EXTRA_KEYS));
+  if (license) return 'business-license';
+
+  if (isSlotItemType(visionType)) return visionType;
+  if (isSlotItemType(hinted)) return hinted;
+  return 'other';
 }
 
 /** Collect root + extracted, recover English keys, decide unreadable. */

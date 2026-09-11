@@ -17,7 +17,7 @@ import {
   type ItemType,
   type VisionPayload,
 } from './extract-schemas';
-import { normalizeVisionFields } from './license-fields';
+import { normalizeVisionFields, recoverItemType } from './license-fields';
 import { MODEL_ID } from './model';
 import { preparePdf } from './pdf';
 import { edge, EdgeError, type CallContext } from './tools/edge';
@@ -245,7 +245,7 @@ export async function extractDocument(input: ExtractInput): Promise<ExtractResul
       : { kind: 'images', mime: kind.mime, pages: [scan.bytes] };
 
     const vision = await askVision(payload, item.itemType, controller.signal);
-    const itemType = vision.itemType;
+    const itemType = recoverItemType(item.itemType, vision.extracted, vision.itemType, item.fileName);
     const status = vision.unreadable ? 'rejected' : 'parsed';
     console.log(
       '[EXTRACT]',

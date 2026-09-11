@@ -14,6 +14,7 @@ import {
   hasExtractedValue,
   hasLicenseIdentity,
   normalizeVisionFields,
+  recoverItemType,
   recoverLicenseFields,
   toIsoDate,
   usccLooksWrong,
@@ -393,5 +394,96 @@ describe('normalizeVisionFields', () => {
     assert.equal(vision.extracted.company_name, '天津九安医疗电子股份有限公司');
     assert.equal(vision.extracted.company_name_en, 'Andon Health Co., Ltd.');
     assert.equal(vision.extracted.unified_social_credit_code, '911200006008904220');
+  });
+});
+
+describe('recoverItemType', () => {
+  it('reads Cofoe 开户许可证 even when the upload was labelled business-license', () => {
+    assert.equal(
+      recoverItemType(
+        'business-license',
+        {
+          company_name: '可孚医疗科技股份有限公司',
+          unified_social_credit_code: '91430111696240992G',
+          account_number: '7559000020071119001',
+          permit_no: 'TEST-J430111071119',
+          bank_name: '中国银行长沙雨花支行',
+        },
+        'other',
+      ),
+      'bank-account',
+    );
+  });
+
+  it('reads Cofoe 开户许可证 from the filename when vision kept licence fields', () => {
+    assert.equal(
+      recoverItemType(
+        'business-license',
+        {
+          company_name: '可孚医疗科技股份有限公司',
+          unified_social_credit_code: '91430111696240992G',
+          legal_representative: '张敏',
+        },
+        'business-license',
+        '07-bank-account.jpg',
+      ),
+      'bank-account',
+    );
+  });
+
+  it('reads Cofoe 法定代表人身份证明 from 公民身份号码', () => {
+    assert.equal(
+      recoverItemType(
+        'other',
+        {
+          company_name: '可孚医疗科技股份有限公司',
+          legal_representative: '张敏',
+          公民身份号码: '00000019800101000X',
+        },
+        'other',
+      ),
+      'signatory',
+    );
+  });
+
+  it('reads Cofoe 法定代表人身份证明 from the filename', () => {
+    assert.equal(
+      recoverItemType(
+        'business-license',
+        {
+          company_name: '可孚医疗科技股份有限公司',
+          legal_representative: '张敏',
+          unified_social_credit_code: '91430111696240992G',
+        },
+        'other',
+        '06-signatory.jpg',
+      ),
+      'signatory',
+    );
+  });
+
+  it('keeps a real 营业执照 when there is no bank or signatory evidence', () => {
+    assert.equal(
+      recoverItemType(
+        'business-license',
+        {
+          company_name: '可孚医疗科技股份有限公司',
+          unified_social_credit_code: '91430111696240992G',
+          注册资本: '贰亿叁仟伍佰捌拾玖万柒仟元整',
+          经营范围: '家用医疗器械的研发、生产与销售',
+          营业执照: '副本',
+        },
+        'business-license',
+        '01-yingye-zhizhao.jpg',
+      ),
+      'business-license',
+    );
+  });
+
+  it('keeps iso-13485 when vision already named it', () => {
+    assert.equal(
+      recoverItemType('business-license', { certificate_number: 'TEST-ISO' }, 'iso-13485', '03-iso-13485.pdf'),
+      'iso-13485',
+    );
   });
 });
