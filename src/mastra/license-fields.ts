@@ -275,40 +275,30 @@ function footerItemType(blob: string): SlotItemType | '' {
   return '';
 }
 
-function fileNameHint(fileName: string): SlotItemType | '' {
-  const name = fileName.toLowerCase();
-  if (name.includes('bank-account')) return 'bank-account';
-  if (name.includes('signatory')) return 'signatory';
-  if (name.includes('yingye-zhizhao') || name.includes('business-license')) return 'business-license';
-  return '';
-}
-
 /**
  * Vision often keeps the upload label (`business-license` / `other`) on a
  * 开户许可证 or 法定代表人身份证明. Slots close only on the exact type.
+ * The file name is not a type: a pack labelled 01-yingye is not one licence.
  */
 export function recoverItemType(
   hinted: string,
   extracted: ExtractedFields,
   visionType = '',
-  fileName = '',
+  _fileName = '',
 ): SlotItemType {
-  const blob = extractedBlob(extracted, `${hinted}\n${visionType}\n${fileName}`);
+  const blob = extractedBlob(extracted, `${hinted}\n${visionType}`);
   const fromFooter = footerItemType(blob);
-  const fromFile = fileNameHint(fileName);
 
   const bank =
     hasFilledKeys(extracted, BANK_KEYS) ||
     blob.includes('开户许可证') ||
-    fromFooter === 'bank-account' ||
-    fromFile === 'bank-account';
+    fromFooter === 'bank-account';
   if (bank) return 'bank-account';
 
   const signatory =
     hasFilledKeys(extracted, SIGNATORY_KEYS) ||
     blob.includes('法定代表人身份证明') ||
-    fromFooter === 'signatory' ||
-    fromFile === 'signatory';
+    fromFooter === 'signatory';
   if (signatory) return 'signatory';
 
   if (fromFooter && fromFooter !== 'business-license') return fromFooter;
@@ -319,12 +309,11 @@ export function recoverItemType(
 
   const license =
     fromFooter === 'business-license' ||
-    fromFile === 'business-license' ||
     (blob.includes('营业执照') && hasFilledKeys(extracted, LICENSE_EXTRA_KEYS));
   if (license) return 'business-license';
 
   if (isSlotItemType(visionType)) return visionType;
-  if (isSlotItemType(hinted)) return hinted;
+  if (isSlotItemType(hinted) && hinted !== 'business-license') return hinted;
   return 'other';
 }
 

@@ -189,6 +189,11 @@ describe('extract schemas', () => {
     assert.match(schemaHint('signatory'), /legal_representative/);
     assert.match(schemaHint('bank-account'), /account_number/);
     assert.match(schemaHint('other'), /营业执照/);
+    assert.match(schemaHint('other'), /iso-13485/);
+    assert.match(schemaHint('other'), /授权委托书/);
+    assert.match(schemaHint('other'), /生产许可/);
+    assert.match(schemaHint('other'), /GSXT/);
+    assert.match(visionPrompt('other'), /never from the file name/);
   });
 });
 
@@ -415,19 +420,19 @@ describe('recoverItemType', () => {
     );
   });
 
-  it('reads Cofoe 开户许可证 from the filename when vision kept licence fields', () => {
+  it('does not type a bank scan from the file name when fields are not a bank permit', () => {
     assert.equal(
       recoverItemType(
-        'business-license',
+        'other',
         {
           company_name: '可孚医疗科技股份有限公司',
           unified_social_credit_code: '91430111696240992G',
           legal_representative: '张敏',
         },
-        'business-license',
+        'other',
         '07-bank-account.jpg',
       ),
-      'bank-account',
+      'other',
     );
   });
 
@@ -446,10 +451,10 @@ describe('recoverItemType', () => {
     );
   });
 
-  it('reads Cofoe 法定代表人身份证明 from the filename', () => {
+  it('does not type a signatory scan from the file name when fields are not that paper', () => {
     assert.equal(
       recoverItemType(
-        'business-license',
+        'other',
         {
           company_name: '可孚医疗科技股份有限公司',
           legal_representative: '张敏',
@@ -458,7 +463,23 @@ describe('recoverItemType', () => {
         'other',
         '06-signatory.jpg',
       ),
-      'signatory',
+      'other',
+    );
+  });
+
+  it('does not type a 营业执照 from the file name when fields are not that paper', () => {
+    assert.equal(
+      recoverItemType(
+        'business-license',
+        {
+          company_name: '可孚医疗科技股份有限公司',
+          unified_social_credit_code: '91430111696240992G',
+          legal_representative: '张敏',
+        },
+        'other',
+        '01-yingye-zhizhao.jpg',
+      ),
+      'other',
     );
   });
 

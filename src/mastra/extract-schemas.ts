@@ -57,7 +57,7 @@ export const SCHEMA_HINTS: Record<ItemType, string> = {
   'regulator-letter':
     'Extract: authority, request_type, due_date, missing_files, letter_date.',
   other:
-    'If this is a Chinese business licence 营业执照, treat it as business-license: company_name is 名称 (Chinese), company_name_en is 英文名称. If this is 授权委托书 appointing an authorized representative, treat it as poa-upp. If this is 法定代表人身份证明 or a 身份证 of the legal representative, treat it as signatory. If this is 开户许可证 or RMB bank details, treat it as bank-account. Otherwise extract the key regulatory fields present.',
+    'Decide itemType from the scan, never from the file name. 营业执照 → business-license: company_name from 名称 (Chinese), company_name_en from 英文名称, unified_social_credit_code, legal_representative, registered_address, registered_capital, business_scope, establishment_date. ISO 13485 / 医疗器械质量管理体系 → iso-13485: certification_body, certificate_number, sites, scope, valid_until. 授权委托书 appointing an authorized representative → poa-upp. 法定代表人身份证明 or 身份证 of that person → signatory. 开户许可证 or RMB bank details → bank-account. 生产许可证 / manufacturing site papers → site-docs. GSXT / 国家企业信用信息公示 / 企业信用 → company-registry. Otherwise extract the key regulatory fields and keep itemType=other.',
 };
 
 const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'webp']);
@@ -123,7 +123,7 @@ export function visionPrompt(hintedType: string, source: VisionSource = 'scan'):
     'Return a single JSON object, no markdown.',
     'Keys: itemType, extracted, unreadable, reason.',
     `itemType must be one of: ${ITEM_TYPES.join(', ')}.`,
-    `The uploader labelled this file as "${hintedType}". If it is a 营业执照, itemType is business-license even when the label is other. Same for 授权委托书 → poa-upp, 法定代表人身份证明 → signatory, 开户许可证 → bank-account.`,
+    `The uploader labelled this file as "${hintedType}". Decide itemType from the scan, never from the file name. 营业执照 → business-license even when the label is other. Same for ISO 13485 → iso-13485, 授权委托书 → poa-upp, 法定代表人身份证明 → signatory, 开户许可证 → bank-account, 生产许可 / site papers → site-docs, GSXT / 国家企业信用 → company-registry.`,
     schemaHint(hintedType),
     'extracted: object of English snake_case keys to string values or null. Do not invent a name or a registration number.',
     'unreadable: true only when nothing usable can be read. A unified social credit code without 名称 is incomplete, not unreadable.',
