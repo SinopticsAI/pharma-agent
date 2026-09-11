@@ -28,7 +28,7 @@ export type ItemType = (typeof ITEM_TYPES)[number];
 
 export const SCHEMA_HINTS: Record<ItemType, string> = {
   'business-license':
-    'Chinese business licence 营业执照. JSON keys MUST be English snake_case. Extract: company_name from 名称 (legal entity name as printed, keep Chinese; never 法定代表人; the name is often on the next line under 名称), company_name_en if present, unified_social_credit_code (统一社会信用代码 / 注册号, 18 characters), legal_representative (法定代表人), registered_capital, establishment_date, registered_address, business_scope. If 名称 is readable, company_name must not be null. A code without a name is incomplete, not unreadable.',
+    'Chinese business licence 营业执照. JSON keys MUST be English snake_case. Extract: company_name from 名称 only (legal entity name as printed, keep Chinese; never 法定代表人, never the title 营业执照, never 英文名称). The English line 英文名称 is company_name_en, never company_name. unified_social_credit_code (统一社会信用代码 / 注册号, 18 characters), legal_representative (法定代表人), registered_capital, establishment_date, registered_address, business_scope. If 名称 is readable, company_name must not be null. A code without a name is incomplete, not unreadable.',
   'company-registry':
     'Extract: company_name, unified_social_credit_code, status, checked_on, source.',
   'iso-13485':
@@ -51,7 +51,7 @@ export const SCHEMA_HINTS: Record<ItemType, string> = {
   'regulator-letter':
     'Extract: authority, request_type, due_date, missing_files, letter_date.',
   other:
-    'If this is a Chinese business licence 营业执照, treat it as business-license and extract those fields. Otherwise extract the key regulatory fields present.',
+    'If this is a Chinese business licence 营业执照, treat it as business-license: company_name is 名称 (Chinese), company_name_en is 英文名称. Otherwise extract the key regulatory fields present.',
 };
 
 const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'webp']);

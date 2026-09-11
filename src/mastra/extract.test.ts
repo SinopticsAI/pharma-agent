@@ -219,6 +219,46 @@ describe('recoverLicenseFields', () => {
     );
     assert.equal(out.company_name, '杭州信纳智析科技有限公司');
   });
+
+  it('prefers 名称 over English company_name on the Andon 营业执照 layout', () => {
+    const out = recoverLicenseFields('', {
+      company_name: 'Andon Health Co., Ltd.',
+      name: 'Andon Health Co., Ltd.',
+      英文名称: 'Andon Health Co., Ltd.',
+      名称: '天津九安医疗电子股份有限公司',
+      unified_social_credit_code: '911200006008904220',
+    });
+    assert.equal(out.company_name, '天津九安医疗电子股份有限公司');
+    assert.equal(out.company_name_en, 'Andon Health Co., Ltd.');
+    assert.equal(out.name, null);
+  });
+
+  it('does not treat the title 营业执照 as the company name', () => {
+    const out = recoverLicenseFields('', {
+      company_name: '营业执照',
+      name: '营业执照',
+      名称: '天津九安医疗电子股份有限公司',
+      unified_social_credit_code: '911200006008904220',
+    });
+    assert.equal(out.company_name, '天津九安医疗电子股份有限公司');
+  });
+
+  it('does not let NAME_RE match inside 英文名称 on one OCR line', () => {
+    const out = recoverLicenseFields(
+      '英文名称 Andon Health Co., Ltd. 名称 天津九安医疗电子股份有限公司',
+      { company_name: null },
+    );
+    assert.equal(out.company_name, '天津九安医疗电子股份有限公司');
+  });
+
+  it('does not take 类型 股份有限公司 as the company name', () => {
+    const out = recoverLicenseFields(
+      ['英文名称 Andon Health Co., Ltd.', '类型 股份有限公司（上市、测试数据）'].join('\n'),
+      { company_name: 'Andon Health Co., Ltd.' },
+    );
+    assert.equal(out.company_name, null);
+    assert.equal(out.company_name_en, 'Andon Health Co., Ltd.');
+  });
 });
 
 describe('usccLooksWrong', () => {
@@ -333,5 +373,21 @@ describe('normalizeVisionFields', () => {
     });
     assert.equal(collected.company_name, '杭州信纳智析科技有限公司');
     assert.equal(collected.unified_social_credit_code, '91330106MAK20KYJ17');
+  });
+
+  it('keeps Andon Chinese 名称 when vision filled company_name with 英文名称', () => {
+    const vision = normalizeVisionFields({
+      itemType: 'business-license',
+      extracted: {
+        company_name: 'Andon Health Co., Ltd.',
+        英文名称: 'Andon Health Co., Ltd.',
+        名称: '天津九安医疗电子股份有限公司',
+        unified_social_credit_code: '911200006008904220',
+      },
+    });
+    assert.equal(vision.unreadable, false);
+    assert.equal(vision.extracted.company_name, '天津九安医疗电子股份有限公司');
+    assert.equal(vision.extracted.company_name_en, 'Andon Health Co., Ltd.');
+    assert.equal(vision.extracted.unified_social_credit_code, '911200006008904220');
   });
 });

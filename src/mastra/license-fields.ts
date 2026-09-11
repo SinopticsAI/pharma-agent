@@ -5,13 +5,17 @@
  */
 
 const USCC_RE = /(?<![0-9A-Za-z])([0-9A-Z]{18})(?![0-9A-Za-z])/;
+/** 名称 as a suffix of 英文名称 must not match: samples2 prints EN above 名称. */
 const NAME_RE =
-  /(?:名称|企业名称|公司名称|单位名称)\s*[:：]?\s*([^\n]{2,80}?(?:有限公司|公司|集团|厂|中心))/;
+  /(?:企业名称|公司名称|单位名称|(?<![\u4e00-\u9fff])名称)\s*[:：]?\s*([^\n]{2,80}?(?:有限责任公司|股份有限公司|有限公司|公司|集团|厂|中心))/;
 const COMPANY_LINE_RE =
   /(?:^|\n)\s*([\u4e00-\u9fffA-Za-z0-9·（）()]{2,40}(?:有限责任公司|股份有限公司|有限公司))/;
-const NAME_NOISE_RE = /法定代表人|经营范围|统一社会|注册资本|成立日期|住所|营业期限/;
+const NAME_NOISE_RE = /法定代表人|经营范围|统一社会|注册资本|成立日期|住所|营业期限|测试数据|营业执照/;
+const LICENSE_TITLE_RE = /营业执照|副本|TEST\s*FORM|SAMPLE FOR INTAKE|仅供测试/;
+const CHINESE_FIRM_RE = /有限责任公司|股份有限公司|有限公司|集团|厂|中心/;
 
-const COMPANY_NAME_KEYS = ['company_name', '名称', '企业名称', '公司名称', '单位名称'] as const;
+const COMPANY_NAME_KEYS = ['名称', '企业名称', '公司名称', '单位名称', 'company_name', 'legal_name'] as const;
+const COMPANY_NAME_EN_KEYS = ['company_name_en', 'name_en', 'english_name', '英文名称', '英文'] as const;
 const USCC_KEYS = [
   'unified_social_credit_code',
   'uscc',
@@ -68,6 +72,29 @@ function fieldValue(value: unknown): string | null {
   return text || null;
 }
 
+function isLicenseTitle(text: string): boolean {
+  return LICENSE_TITLE_RE.test(text) || NAME_NOISE_RE.test(text);
+}
+
+/** A 名称 line, not the 类型 “股份有限公司（上市、测试数据）” and not the title 营业执照. */
+function isChineseCompanyName(text: string): boolean {
+  const value = asText(text);
+  if (!value || isLicenseTitle(value)) return false;
+  if (!/[\u4e00-\u9fff]/.test(value) || !CHINESE_FIRM_RE.test(value)) return false;
+  const trade = value.replace(/有限责任公司|股份有限公司|有限公司/g, '');
+  return /[\u4e00-\u9fff]{2,}/.test(trade);
+}
+
+function isLatinCompanyName(text: string): boolean {
+  const value = asText(text);
+  if (!value || /[\u4e00-\u9fff]/.test(value) || isLicenseTitle(value)) return false;
+  return /[A-Za-z]/.test(value);
+}
+
+function tidyName(text: string): string {
+  return text.replace(/[ 、,;；]+$/g, '').replace(/^[ 、,;；]+/g, '');
+}
+
 /** Merge `extracted` with root-level fields the model put beside the envelope. */
 export function collectExtracted(parsed: Record<string, unknown>): ExtractedFields {
   const out: ExtractedFields = {};
@@ -98,17 +125,36 @@ export function recoverLicenseFields(ocrText: string, extracted: unknown): Extra
       ? { ...(extracted as ExtractedFields) }
       : {};
 
-  let name = filled(out, COMPANY_NAME_KEYS);
-  if (!name) {
-    const match = NAME_RE.exec(ocrText || '');
-    if (match?.[1]) name = match[1].replace(/[ 、,;；]+$/g, '').replace(/^[ 、,;；]+/g, '');
+  const latinFromName = filled(out, ['company_name', 'name']);
+  const latin =
+    filled(out, COMPANY_NAME_EN_KEYS) || (isLatinCompanyName(latinFromName) ? latinFromName : '');
+
+  let name = '';
+  for (const key of COMPANY_NAME_KEYS) {
+    const text = filled(out, [key]);
+    if (isChineseCompanyName(text)) {
+      name = text;
+      break;
+    }
   }
-  if (!name) {
+  if (!isChineseCompanyName(name)) {
+    const match = NAME_RE.exec(ocrText || '');
+    if (match?.[1] && isChineseCompanyName(tidyName(match[1]))) name = tidyName(match[1]);
+  }
+  if (!isChineseCompanyName(name)) {
     const match = COMPANY_LINE_RE.exec(ocrText || '');
     const candidate = (match?.[1] ?? '').trim();
-    if (candidate && !NAME_NOISE_RE.test(candidate)) name = candidate;
+    if (isChineseCompanyName(candidate)) name = candidate;
   }
-  if (name) out.company_name = name;
+
+  if (isChineseCompanyName(name)) {
+    out.company_name = name;
+  } else if (out.company_name && !isChineseCompanyName(out.company_name)) {
+    // English or the title 营业执照 must not become legalName.
+    out.company_name = null;
+  }
+  if (latin) out.company_name_en = latin;
+  if (out.name && !isChineseCompanyName(asText(out.name))) out.name = null;
 
   let code = filled(out, USCC_KEYS);
   if (!code) {
