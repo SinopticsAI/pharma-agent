@@ -11,6 +11,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { jsonish } from './jsonish';
+import { proposeVariantsBodySchema } from './variants-schema';
 
 const EDGE_BASE = process.env.EDGE_API_BASE ?? '';
 const EDGE_KEY = process.env.EDGE_API_KEY ?? '';
@@ -147,7 +148,7 @@ function callerOf(context: unknown): CallContext {
   };
 }
 
-const L10n = jsonish(z.object({ ru: z.string(), en: z.string().optional(), zh: z.string().optional() }));
+export { proposeVariantsBodySchema };
 
 // ------------------------------------------------------------------ company --
 
@@ -333,34 +334,8 @@ export const approveProductData = createTool({
 export const proposeVariants = createTool({
   id: 'propose-variants',
   description:
-    'Write classification options. The core accepts them once the card has a name and an intended use; a completeness below 100 is not a refusal. Include a forbidden option with a reason whenever a tempting wrong class exists — it is shown as a warning and cannot be selected.',
-  inputSchema: z.object({
-    productId: z.string().optional(),
-    model: z.string().optional(),
-    promptVersion: z.string().optional(),
-    variants: jsonish(
-      z.array(
-        z.object({
-          variantType: z.enum(['recommended', 'alternative', 'forbidden']),
-          kind: z.enum(['device', 'drug']),
-          track: z.enum(['pp1684', 'eaeu46', 'eaeu78']),
-          riskClass: z.enum(['1', '2a', '2b', '3']),
-          title: L10n,
-          summary: L10n,
-          pros: jsonish(z.array(L10n)).optional(),
-          cons: jsonish(z.array(L10n)).optional(),
-          reason: L10n.optional(),
-          budget: jsonish(
-            z.object({
-              currency: z.literal('RMB'),
-              baskets: z.array(z.object({ key: z.string(), amount: z.number() })),
-            }),
-          ).optional(),
-          cycleMonths: z.tuple([z.number(), z.number()]).optional(),
-        }),
-      ).min(1),
-    ),
-  }),
+    'Write two or three classification options. The core accepts them once the card has a name and an intended use; a completeness below 100 is not a refusal. Overwrite a planning-frame seed if get-product already lists variants. Include a forbidden option with a reason whenever a tempting wrong class exists — it is shown as a warning and cannot be selected.',
+  inputSchema: proposeVariantsBodySchema,
   execute: async ({ productId, ...body }, context) =>
     edge(`/products/${resolveProductId(productId, context)}/variants`, { method: 'POST', body }, callerOf(context)),
 });

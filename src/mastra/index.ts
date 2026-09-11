@@ -84,7 +84,7 @@ export const mastra = new Mastra({
     apiRoutes: [
       chatRoute({
         path: '/chat/:agentId',
-        defaultOptions: { maxSteps: 5 },
+        defaultOptions: { maxSteps: 10 },
       }),
       registerApiRoute('/health', {
         method: 'GET',

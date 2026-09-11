@@ -36,3 +36,13 @@ export function boolish(schema: z.ZodBoolean = z.boolean()) {
     return parseJsonString(value);
   }, schema);
 }
+
+export function numish(schema: z.ZodNumber = z.number()) {
+  return z.preprocess((value) => {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Number(value))) {
+      return Number(value);
+    }
+    return parseJsonString(value);
+  }, schema);
+}

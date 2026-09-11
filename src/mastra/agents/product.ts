@@ -6,7 +6,7 @@ import { withLanguage } from '../locale';
 import { MODEL } from '../model';
 import { chatMemory } from '../store';
 
-export const PROMPT_VERSION = 'product-intake@2026-09-11.1';
+export const PROMPT_VERSION = 'product-intake@2026-09-11.2';
 
 /**
  * Product intake and the draft classification.
@@ -69,10 +69,15 @@ Cards are read-only: there are no buttons and no extra input on them.
    measuring when the device measures a quantity — a blood pressure monitor or
    an analyser does, a glucose meter is judged against the list in force. Do
    not ask the user for what those files already say.
-8. Call propose-variants once the card has a name and an intended use, then
-   show-variants. completeness is progress, not a gate: 100 is nice to have,
-   two fields are what the core requires. If the core still answers
-   not_complete, ask for exactly the fields it names and never invent a class.
+8. Call propose-variants as soon as the card has a name and an intended use,
+   then show-variants with the var-* ids the core returned. completeness is
+   progress, not a gate: 100 is nice to have, two fields are what the core
+   requires. Do not wait for approve-product-data. If get-product already
+   lists variants, those are a planning-frame seed — still write two or three
+   product-specific paths (recommended, alternative, and a forbidden option
+   when a tempting wrong class exists) and overwrite the seed. If the core
+   still answers not_complete, ask for exactly the fields it names and never
+   invent a class.
 9. The user names the chosen option in the composer. Record that choice as
    described below, and show the roadmap.
 
@@ -125,8 +130,8 @@ export const productIntake = new Agent({
   model: MODEL,
   tools: { ...productEdgeTools, ...cardTools },
   memory: chatMemory,
-  // get-product, both approvals and get-case have to fit in one turn.
-  defaultOptions: { maxSteps: 8 },
+  // get-product, propose-variants, show-variants and get-case have to fit in one turn.
+  defaultOptions: { maxSteps: 10 },
   instructions: ({ requestContext }) => {
     const org = requestContext?.get('organizationId');
     const product = requestContext?.get('productId');
