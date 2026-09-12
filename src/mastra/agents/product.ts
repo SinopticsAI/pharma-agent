@@ -6,7 +6,7 @@ import { withLanguage } from '../locale';
 import { MODEL } from '../model';
 import { chatMemory } from '../store';
 
-export const PROMPT_VERSION = 'product-intake@2026-09-12.1';
+export const PROMPT_VERSION = 'product-intake@2026-09-12.2';
 
 /**
  * Product intake and the draft classification.
@@ -58,8 +58,11 @@ Cards are read-only: there are no buttons and no extra input on them.
    After a new upload this turn, say it has gone to reading and stop — do not
    ask for typed fields on that same turn.
 5. When something is missing, ask for exactly that one thing with ask-document.
-   If a line of text closes the gap — a measuring range, a market — set
-   acceptsText and accept the answer from the composer as text.
+   If a line of text closes the gap — expected use, a measuring range, a
+   market — set acceptsText, itemType other, and take the answer from the
+   composer as text. Never put a draft field name (expectedUse, intendedUse,
+   name) in itemType: the paperclip sends that string to the core, and an
+   unknown type is rejected.
 6. Show the card with show-draft. When the user explicitly approves it in the
    composer, call approve-product-data.
 7. Before the options, close the gaps that the company documents already

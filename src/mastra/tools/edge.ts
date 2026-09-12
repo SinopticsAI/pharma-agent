@@ -10,6 +10,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import { itemTypeOf } from '../extract-schemas';
 import { jsonish } from './jsonish';
 import { proposeVariantsBodySchema } from './variants-schema';
 
@@ -195,7 +196,7 @@ export const requestUpload = createTool({
     const organizationId = resolveOrganizationId(input.organizationId, context);
     return edge(
       `/organizations/${organizationId}/items/upload-url`,
-      { method: 'POST', body: { ...input, organizationId } },
+      { method: 'POST', body: { ...input, organizationId, itemType: itemTypeOf(input.itemType) } },
       callerOf(context),
     );
   },

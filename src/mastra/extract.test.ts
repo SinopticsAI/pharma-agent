@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import { extractFailureKind, extractFailureReason, isDegenerateAnswer } from './extract-reason.ts';
 import {
   isItemType,
+  itemTypeOf,
   scanKind,
   schemaHint,
   visionPrompt,
@@ -194,6 +195,16 @@ describe('extract schemas', () => {
     assert.match(schemaHint('other'), /生产许可/);
     assert.match(schemaHint('other'), /GSXT/);
     assert.match(visionPrompt('other'), /never from the file name/);
+  });
+
+  it('folds unknown and l10n itemType labels to other', () => {
+    assert.equal(itemTypeOf('nmpa-certificate'), 'nmpa-certificate');
+    assert.equal(itemTypeOf('NMPA-Certificate'), 'nmpa-certificate');
+    assert.equal(itemTypeOf('expectedUse'), 'other');
+    assert.equal(itemTypeOf('intended-use'), 'other');
+    assert.equal(itemTypeOf({ zh: 'instruction-cn' }), 'instruction-cn');
+    assert.equal(itemTypeOf({ zh: '预期用途' }), 'other');
+    assert.equal(itemTypeOf(undefined), 'other');
   });
 });
 

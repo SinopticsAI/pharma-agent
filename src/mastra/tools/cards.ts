@@ -9,6 +9,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import { ITEM_TYPES, itemTypeOf } from '../extract-schemas';
 import { boolish, jsonish } from './jsonish';
 
 const L10n = jsonish(
@@ -28,7 +29,14 @@ export const askDocument = createTool({
   description:
     'Ask for one specific thing. The card shows the question only: the user replies in the composer or attaches a file with the paperclip — never a form on the card, never a questionnaire.',
   inputSchema: z.object({
-    itemType: z.string().describe('business-license, instruction-cn, tech-spec, and so on'),
+    itemType: z.preprocess(
+      itemTypeOf,
+      z
+        .enum(ITEM_TYPES)
+        .describe(
+          `One of: ${ITEM_TYPES.join(', ')}. For a typed line (expected use, measuring range) use other. Never pass a draft field key such as expectedUse or intendedUse.`,
+        ),
+    ),
     question: L10n,
     acceptsText: boolish().default(false).describe('true when one line of text closes the gap'),
     why: L10n.optional().describe('what breaks without it; fill the current UI-language key'),

@@ -95,6 +95,23 @@ export function isItemType(value: string): value is ItemType {
   return (ITEM_TYPES as readonly string[]).includes(value);
 }
 
+function unwrapItemType(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const rec = value as Record<string, unknown>;
+    for (const key of ['value', 'zh', 'en', 'ru'] as const) {
+      if (typeof rec[key] === 'string' && rec[key].trim()) return rec[key];
+    }
+  }
+  return '';
+}
+
+/** Edge allowlist. A draft field name (expectedUse) or an l10n object becomes other. */
+export function itemTypeOf(value: unknown): ItemType {
+  const key = unwrapItemType(value).trim().toLowerCase();
+  return isItemType(key) ? key : 'other';
+}
+
 export function schemaHint(itemType: string): string {
   const key = itemType.trim().toLowerCase();
   if (isItemType(key)) return SCHEMA_HINTS[key];
