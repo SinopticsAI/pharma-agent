@@ -11,7 +11,17 @@ import { z } from 'zod';
 
 import { boolish, jsonish } from './jsonish';
 
-const L10n = jsonish(z.object({ ru: z.string(), en: z.string().optional(), zh: z.string().optional() }));
+const L10n = jsonish(
+  z
+    .object({
+      ru: z.string(),
+      en: z.string().optional(),
+      zh: z.string().optional(),
+    })
+    .describe(
+      'Card copy. Always fill the key of the current UI language (zh, en, or ru). The ru key is a translation for the Russian shell, not the reply language.',
+    ),
+);
 
 export const askDocument = createTool({
   id: 'ask-document',
@@ -21,7 +31,7 @@ export const askDocument = createTool({
     itemType: z.string().describe('business-license, instruction-cn, tech-spec, and so on'),
     question: L10n,
     acceptsText: boolish().default(false).describe('true when one line of text closes the gap'),
-    why: L10n.optional().describe('what breaks without it, in the user language'),
+    why: L10n.optional().describe('what breaks without it; fill the current UI-language key'),
   }),
   outputSchema: z.object({ shown: z.literal(true) }),
   execute: async () => ({ shown: true as const }),

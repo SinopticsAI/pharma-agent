@@ -6,7 +6,7 @@ import { withLanguage } from '../locale';
 import { MODEL } from '../model';
 import { chatMemory } from '../store';
 
-export const PROMPT_VERSION = 'product-intake@2026-09-11.2';
+export const PROMPT_VERSION = 'product-intake@2026-09-12.1';
 
 /**
  * Product intake and the draft classification.
@@ -45,7 +45,7 @@ Cards are read-only: there are no buttons and no extra input on them.
    never tell the user the system does not read PDF and never ask them to
    replace one with a photograph. Judge the newest file of that kind; ignore
    an older rejected file and never print itemId. On any later
-   user message (status, «готово?», re-read) call get-product once. If
+   user message (status, done?, re-read) call get-product once. If
    list-documents already shows parsed or rejected on the newest file, treat
    extraction as finished even without the marker. If fields are already on
    get-product, show-draft. Do not say you are still waiting. If the newest

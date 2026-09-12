@@ -21,7 +21,7 @@ import { companyIntake } from './agents/company';
 import { productIntake } from './agents/product';
 import { callerFrom } from './auth/claims';
 import { extractDocument } from './extract';
-import { localeOf, type Locale } from './locale';
+import { localeFromHints, type Locale } from './locale';
 import { chatMemory, storage } from './store';
 import { EdgeError } from './tools/edge';
 
@@ -34,11 +34,11 @@ function asId(value: unknown): string {
 async function chatHintsFromRequest(c: {
   req: { method: string; header: (name: string) => string | undefined; raw: Request };
 }): Promise<ChatHints> {
-  let locale: Locale | undefined;
   let organizationId = '';
   let productId = '';
+  let bodyLocale: unknown;
+  let rcLocale: unknown;
   const header = c.req.header('X-Pharma-Locale');
-  if (header === 'zh' || header === 'en' || header === 'ru') locale = header;
   if (c.req.method === 'POST') {
     try {
       const body = (await c.req.raw.clone().json()) as {
@@ -47,9 +47,8 @@ async function chatHintsFromRequest(c: {
       };
       const data = body.data ?? {};
       const rc = body.requestContext ?? {};
-      if (locale === undefined && (data.locale ?? rc.locale) !== undefined) {
-        locale = localeOf(data.locale ?? rc.locale);
-      }
+      bodyLocale = data.locale;
+      rcLocale = rc.locale;
       organizationId =
         asId(data.organizationId) || asId(rc.organizationId) || asId((body as { organizationId?: unknown }).organizationId);
       productId = asId(data.productId) || asId(rc.productId);
@@ -57,7 +56,11 @@ async function chatHintsFromRequest(c: {
       // Chat route still needs the original body; a non-JSON POST is not ours.
     }
   }
-  return { locale: locale ?? 'zh', organizationId, productId };
+  return {
+    locale: localeFromHints({ header, body: bodyLocale, requestContext: rcLocale }),
+    organizationId,
+    productId,
+  };
 }
 
 export const mastra = new Mastra({
